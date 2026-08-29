@@ -31,6 +31,7 @@ fun CrashBanner(
     report: String,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    title: String = "The app crashed last time it ran",
 ) {
     val clipboard = LocalClipboardManager.current
 
@@ -43,7 +44,7 @@ fun CrashBanner(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = "The app crashed last time it ran",
+                text = title,
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(

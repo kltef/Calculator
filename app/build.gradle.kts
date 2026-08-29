@@ -18,8 +18,14 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Minification is OFF pending diagnosis of a startup failure inside
+            // Symja's initialisation. Symja drags in kryo, reflectasm, janino,
+            // log4j and choco-solver, none of which have keep rules here, and
+            // R8 is the one difference between the APK and the engine tests
+            // (which pass). Re-enable once the cause is known and the keep
+            // rules cover it; the shrunk build is 8 MB against 25 MB.
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

@@ -43,6 +43,17 @@ class CalculatorSession(
      */
     private var startupFailure: Throwable? = null
 
+    private val _startupDiagnostic = MutableStateFlow<String?>(null)
+
+    /**
+     * The full failure report if the engine could not start, for display.
+     *
+     * The top-level message is useless on its own — an `ExceptionInInitializerError`
+     * carries no message at all — so this walks the whole cause chain and keeps
+     * the deepest stack trace, which is the part that names the culprit.
+     */
+    val startupDiagnostic: StateFlow<String?> = _startupDiagnostic.asStateFlow()
+
     private val _variables = MutableStateFlow<Map<String, String>>(emptyMap())
 
     /** The user's variable bindings, for display. */
@@ -103,17 +114,45 @@ class CalculatorSession(
             engineFactory().also { engine = it }
         } catch (t: Throwable) {
             startupFailure = t
+            _startupDiagnostic.value = describe(t)
             null
         }
     }
 
     private fun startupFailureResult(): CalcResult {
-        val failure = startupFailure
-        val detail = failure?.let { "${it::class.java.simpleName}: ${it.message}" }.orEmpty()
+        val root = startupFailure?.let { rootCauseOf(it) }
+        val detail = root?.let { "${it::class.java.simpleName}: ${it.message ?: "no message"}" }.orEmpty()
         return CalcResult.Failure(
             CalcResult.ErrorKind.INTERNAL,
             "The math engine couldn't start. $detail".trim(),
         )
+    }
+
+    private fun rootCauseOf(t: Throwable): Throwable {
+        var current = t
+        while (current.cause != null && current.cause !== current) current = current.cause!!
+        return current
+    }
+
+    /** Cause chain plus the deepest stack trace — enough to identify the culprit. */
+    private fun describe(t: Throwable): String = buildString {
+        var current: Throwable? = t
+        var depth = 0
+        while (current != null && depth < MAX_CAUSE_DEPTH) {
+            appendLine("${current::class.java.name}: ${current.message ?: "(no message)"}")
+            val next = current.cause
+            if (next == null || next === current) break
+            append("  caused by ")
+            current = next
+            depth++
+        }
+        appendLine()
+        rootCauseOf(t).stackTrace.take(MAX_STACK_FRAMES).forEach { appendLine("  at $it") }
+    }
+
+    private companion object {
+        const val MAX_CAUSE_DEPTH = 10
+        const val MAX_STACK_FRAMES = 25
     }
 
     private suspend fun publishVariables() {

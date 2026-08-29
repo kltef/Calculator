@@ -35,9 +35,17 @@ class MainActivity : ComponentActivity() {
 
                 val reporter = (application as CasCalculatorApp).crashReporter
                 var crashReport by remember { mutableStateOf(reporter.lastCrash()) }
+                val engineDiagnostic by viewModel.engineDiagnostic.collectAsStateWithLifecycle()
 
                 Surface(modifier = Modifier.windowInsetsPadding(WindowInsets.systemBars)) {
                     Column {
+                        engineDiagnostic?.let { report ->
+                            CrashBanner(
+                                report = report,
+                                onDismiss = {},
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            )
+                        }
                         crashReport?.let { report ->
                             CrashBanner(
                                 report = report,

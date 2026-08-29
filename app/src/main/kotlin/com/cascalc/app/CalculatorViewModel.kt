@@ -53,6 +53,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    /** Set if the math engine failed to start; a full report, for display. */
+    val engineDiagnostic: StateFlow<String?> = session.startupDiagnostic
+
     private var previewJob: Job? = null
 
     init {
