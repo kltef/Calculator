@@ -12,11 +12,16 @@ sealed interface CalcResult {
      *                    (the exact result is already a plain integer/decimal)
      * @param raw         Symja's own `toString` form, useful for feeding the
      *                    result back into a later calculation
+     * @param steps       a worked derivation, when one could be generated
+     * @param note        a short remark about the result (which variable was
+     *                    solved for, what an assignment stored, and so on)
      */
     data class Success(
         val exact: String,
         val approximate: String?,
         val raw: String,
+        val steps: List<SolutionStep> = emptyList(),
+        val note: String? = null,
     ) : CalcResult
 
     data class Failure(val kind: ErrorKind, val message: String) : CalcResult

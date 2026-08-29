@@ -1,6 +1,7 @@
 package com.cascalc.app
 
 import android.content.Context
+import com.cascalc.engine.Action
 import com.cascalc.engine.AngleMode
 import com.cascalc.engine.CalcResult
 import com.cascalc.engine.HistoryEntry
@@ -54,6 +55,8 @@ class HistoryStore(context: Context) {
         put("raw", result.raw)
         put("angleMode", angleMode.name)
         put("at", timestampMillis)
+        put("action", action.name)
+        put("note", result.note ?: JSONObject.NULL)
     }
 
     private fun JSONObject.toEntry(): HistoryEntry? {
@@ -66,6 +69,9 @@ class HistoryStore(context: Context) {
                 exact = exact,
                 approximate = if (isNull("approx")) null else optString("approx"),
                 raw = optString("raw", exact),
+                // Steps are cheap to regenerate and bulky to store, so history
+                // keeps the answer and drops the derivation.
+                note = if (isNull("note")) null else optString("note"),
             ),
             angleMode = if (optString("angleMode") == AngleMode.DEGREES.name) {
                 AngleMode.DEGREES
@@ -73,6 +79,8 @@ class HistoryStore(context: Context) {
                 AngleMode.RADIANS
             },
             timestampMillis = optLong("at"),
+            action = runCatching { Action.valueOf(optString("action")) }
+                .getOrDefault(Action.EVALUATE),
         )
     }
 

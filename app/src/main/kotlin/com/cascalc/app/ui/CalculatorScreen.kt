@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -17,6 +18,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -33,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import com.cascalc.app.CalculatorUiState
 import com.cascalc.app.R
 import com.cascalc.app.Selection
+import com.cascalc.engine.Action
 import com.cascalc.engine.AngleMode
 import com.cascalc.engine.HistoryEntry
 
@@ -46,12 +49,17 @@ fun CalculatorScreen(
     onBackspace: () -> Unit,
     onClear: () -> Unit,
     onEvaluate: () -> Unit,
+    onAction: (Action) -> Unit,
     onToggleAngleMode: () -> Unit,
     onToggleHistory: () -> Unit,
+    onToggleVariables: () -> Unit,
+    onToggleSteps: () -> Unit,
     onRecallInput: (HistoryEntry) -> Unit,
     onRecallResult: (HistoryEntry) -> Unit,
     onDeleteHistoryEntry: (Long) -> Unit,
     onClearHistory: () -> Unit,
+    onInsertVariable: (String) -> Unit,
+    onDeleteVariable: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -65,6 +73,7 @@ fun CalculatorScreen(
             historyVisible = state.historyVisible,
             onToggleAngleMode = onToggleAngleMode,
             onToggleHistory = onToggleHistory,
+            onToggleVariables = onToggleVariables,
         )
 
         AnimatedVisibility(visible = state.historyVisible) {
@@ -78,6 +87,15 @@ fun CalculatorScreen(
             )
         }
 
+        AnimatedVisibility(visible = state.variablesVisible) {
+            VariablesPanel(
+                variables = state.variables,
+                onInsert = onInsertVariable,
+                onDelete = onDeleteVariable,
+                modifier = Modifier.heightIn(max = 220.dp),
+            )
+        }
+
         ExpressionField(
             expression = state.expression,
             selection = state.selection,
@@ -86,6 +104,25 @@ fun CalculatorScreen(
         )
 
         ResultLine(state = state, error = error)
+
+        ActionBar(
+            onAction = onAction,
+            enabled = state.expression.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        if (state.steps.isNotEmpty()) {
+            TextButton(onClick = onToggleSteps) {
+                Text(
+                    stringResource(
+                        if (state.stepsVisible) R.string.hide_steps else R.string.show_steps,
+                    ),
+                )
+            }
+            AnimatedVisibility(visible = state.stepsVisible) {
+                StepsPanel(steps = state.steps, modifier = Modifier.heightIn(max = 260.dp))
+            }
+        }
 
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.BottomCenter) {
             Keypad(
@@ -106,6 +143,7 @@ private fun TopBar(
     historyVisible: Boolean,
     onToggleAngleMode: () -> Unit,
     onToggleHistory: () -> Unit,
+    onToggleVariables: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -119,13 +157,21 @@ private fun TopBar(
             label = { Text(if (angleMode == AngleMode.DEGREES) "DEG" else "RAD") },
             modifier = Modifier.semantics { contentDescription = angleModeLabel },
         )
-        IconButton(onClick = onToggleHistory) {
-            Icon(
-                imageVector = Icons.Filled.History,
-                contentDescription = stringResource(
-                    if (historyVisible) R.string.hide_history else R.string.show_history,
-                ),
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onToggleVariables) {
+                Icon(
+                    imageVector = Icons.Filled.Functions,
+                    contentDescription = stringResource(R.string.show_variables),
+                )
+            }
+            IconButton(onClick = onToggleHistory) {
+                Icon(
+                    imageVector = Icons.Filled.History,
+                    contentDescription = stringResource(
+                        if (historyVisible) R.string.hide_history else R.string.show_history,
+                    ),
+                )
+            }
         }
     }
 }
@@ -174,6 +220,8 @@ private fun ExpressionField(
 private fun ResultLine(state: CalculatorUiState, error: String?) {
     val preview = state.previewText
     val approximation = state.previewApproximation
+    // A committed result (from "=" or an action chip) outranks the live preview.
+    val committed = state.committed
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -186,6 +234,27 @@ private fun ResultLine(state: CalculatorUiState, error: String?) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.error,
             )
+
+            committed != null -> {
+                Text(
+                    text = committed.exact,
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                committed.approximate?.let { approximate ->
+                    Text(
+                        text = "${stringResource(R.string.approx_prefix)} $approximate",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                committed.note?.let { note ->
+                    Text(
+                        text = note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             preview != null -> {
                 Text(

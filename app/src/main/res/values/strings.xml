@@ -13,4 +13,14 @@
     <string name="equals">Equals</string>
     <string name="angle_mode">Angle mode</string>
     <string name="approx_prefix">≈</string>
+    <string name="variables_title">Variables</string>
+    <string name="variables_empty">Type something like <![CDATA[<b>a = 5</b>]]> to store a value.</string>
+    <string name="delete_variable">Delete variable</string>
+    <string name="show_variables">Show variables</string>
+    <string name="action_simplify">Simplify</string>
+    <string name="action_expand">Expand</string>
+    <string name="action_factor">Factor</string>
+    <string name="action_solve">Solve</string>
+    <string name="show_steps">Show steps</string>
+    <string name="hide_steps">Hide steps</string>
 </resources>

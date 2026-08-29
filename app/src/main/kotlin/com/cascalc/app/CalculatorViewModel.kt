@@ -3,10 +3,12 @@ package com.cascalc.app
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.cascalc.engine.Action
 import com.cascalc.engine.AngleMode
 import com.cascalc.engine.CalcResult
 import com.cascalc.engine.CalculatorSession
 import com.cascalc.engine.HistoryEntry
+import com.cascalc.engine.SolutionStep
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +26,12 @@ data class CalculatorUiState(
     val angleMode: AngleMode = AngleMode.RADIANS,
     val history: List<HistoryEntry> = emptyList(),
     val historyVisible: Boolean = false,
+    val variables: Map<String, String> = emptyMap(),
+    val variablesVisible: Boolean = false,
+    /** The result of the last action the user actually committed. */
+    val committed: CalcResult.Success? = null,
+    val steps: List<SolutionStep> = emptyList(),
+    val stepsVisible: Boolean = false,
 ) {
     /** Errors are hidden while typing — half-typed input is not a mistake yet. */
     val previewText: String? = (preview as? CalcResult.Success)?.exact
@@ -59,11 +67,24 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 store.save(entries)
             }
         }
+        viewModelScope.launch {
+            session.variables.collect { variables ->
+                _uiState.value = _uiState.value.copy(variables = variables)
+            }
+        }
     }
 
     fun onExpressionChanged(text: String, selection: Selection) {
         _error.value = null
-        _uiState.value = _uiState.value.copy(expression = text, selection = selection)
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            expression = text,
+            selection = selection,
+            // Steps belong to the expression that produced them.
+            committed = if (text == current.expression) current.committed else null,
+            steps = if (text == current.expression) current.steps else emptyList(),
+            stepsVisible = if (text == current.expression) current.stepsVisible else false,
+        )
         schedulePreview()
     }
 
@@ -109,20 +130,71 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun toggleHistory() {
-        _uiState.value = _uiState.value.copy(historyVisible = !_uiState.value.historyVisible)
+        _uiState.value = _uiState.value.copy(
+            historyVisible = !_uiState.value.historyVisible,
+            variablesVisible = false,
+        )
     }
 
-    fun evaluate() {
+    fun toggleVariables() {
+        _uiState.value = _uiState.value.copy(
+            variablesVisible = !_uiState.value.variablesVisible,
+            historyVisible = false,
+        )
+    }
+
+    fun toggleSteps() {
+        _uiState.value = _uiState.value.copy(stepsVisible = !_uiState.value.stepsVisible)
+    }
+
+    fun deleteVariable(name: String) {
+        viewModelScope.launch { session.clearVariable(name) }
+    }
+
+    fun evaluate() = run(Action.EVALUATE)
+
+    /**
+     * Commits the current expression under [action].
+     *
+     * What happens to the editor afterwards depends on the action, because the
+     * useful next move differs: a plain evaluation is usually the input to
+     * another calculation, whereas a solve or a simplify is something you want
+     * to keep looking at next to what you typed.
+     */
+    fun run(action: Action) {
         val state = _uiState.value
         if (state.expression.isBlank()) return
         viewModelScope.launch {
-            when (val result = session.submit(state.expression, state.angleMode)) {
+            when (val result = session.submit(state.expression, state.angleMode, action)) {
                 is CalcResult.Success -> {
                     _error.value = null
-                    // Carry the result forward so it can be used in the next step.
-                    onExpressionChanged(result.raw, Selection(result.raw.length, result.raw.length))
+                    _uiState.value = _uiState.value.copy(
+                        committed = result,
+                        steps = result.steps,
+                        stepsVisible = result.steps.isNotEmpty(),
+                    )
+                    when {
+                        // An assignment is done; clear the line for the next one.
+                        result.note?.startsWith("Stored") == true -> clear()
+                        // A plain value can be carried forward as new input.
+                        action == Action.EVALUATE && result.steps.isEmpty() && result.note == null ->
+                            onExpressionChanged(
+                                result.raw,
+                                Selection(result.raw.length, result.raw.length),
+                            )
+                        // Otherwise leave the expression alone so it stays
+                        // visible beside its answer.
+                        else -> Unit
+                    }
                 }
-                is CalcResult.Failure -> _error.value = result.message
+                is CalcResult.Failure -> {
+                    _error.value = result.message
+                    _uiState.value = _uiState.value.copy(
+                        committed = null,
+                        steps = emptyList(),
+                        stepsVisible = false,
+                    )
+                }
                 CalcResult.Empty -> Unit
             }
         }

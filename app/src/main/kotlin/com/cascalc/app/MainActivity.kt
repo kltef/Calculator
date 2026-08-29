@@ -36,12 +36,17 @@ class MainActivity : ComponentActivity() {
                         onBackspace = viewModel::backspace,
                         onClear = viewModel::clear,
                         onEvaluate = viewModel::evaluate,
+                        onAction = viewModel::run,
                         onToggleAngleMode = viewModel::toggleAngleMode,
                         onToggleHistory = viewModel::toggleHistory,
+                        onToggleVariables = viewModel::toggleVariables,
+                        onToggleSteps = viewModel::toggleSteps,
                         onRecallInput = viewModel::recallInput,
                         onRecallResult = viewModel::recallResult,
                         onDeleteHistoryEntry = viewModel::deleteHistoryEntry,
                         onClearHistory = viewModel::clearHistory,
+                        onInsertVariable = viewModel::insert,
+                        onDeleteVariable = viewModel::deleteVariable,
                     )
                 }
             }

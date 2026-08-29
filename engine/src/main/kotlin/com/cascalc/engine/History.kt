@@ -11,6 +11,7 @@ data class HistoryEntry(
     val result: CalcResult.Success,
     val angleMode: AngleMode,
     val timestampMillis: Long,
+    val action: Action = Action.EVALUATE,
 )
 
 /**
@@ -28,8 +29,13 @@ class CalculationHistory(
     private val _entries = MutableStateFlow<List<HistoryEntry>>(emptyList())
     val entries: StateFlow<List<HistoryEntry>> = _entries.asStateFlow()
 
-    fun record(input: String, result: CalcResult.Success, angleMode: AngleMode): HistoryEntry {
-        val entry = HistoryEntry(nextId++, input.trim(), result, angleMode, clock())
+    fun record(
+        input: String,
+        result: CalcResult.Success,
+        angleMode: AngleMode,
+        action: Action = Action.EVALUATE,
+    ): HistoryEntry {
+        val entry = HistoryEntry(nextId++, input.trim(), result, angleMode, clock(), action)
         _entries.value = (listOf(entry) + _entries.value).take(capacity)
         return entry
     }
