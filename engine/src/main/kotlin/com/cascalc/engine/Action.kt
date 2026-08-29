@@ -1,19 +1,33 @@
 package com.cascalc.engine
 
 /** What the user wants done with the expression they typed. */
-enum class Action {
+enum class Action(val label: String, val group: Group) {
+
     /** Work out a value (or store an assignment). */
-    EVALUATE,
+    EVALUATE("Evaluate", Group.CORE),
 
-    /** `Simplify` — reduce to the smallest equivalent form. */
-    SIMPLIFY,
+    // --- V2: symbolic algebra -------------------------------------------
+    SIMPLIFY("Simplify", Group.ALGEBRA),
+    EXPAND("Expand", Group.ALGEBRA),
+    FACTOR("Factor", Group.ALGEBRA),
+    SOLVE("Solve", Group.ALGEBRA),
 
-    /** `Expand` — multiply everything out: `(x+1)^2` becomes `1+2*x+x^2`. */
-    EXPAND,
+    // --- V4: calculus ----------------------------------------------------
+    DIFFERENTIATE("d/dx", Group.CALCULUS),
+    INTEGRATE("∫ dx", Group.CALCULUS),
+    LIMIT("Limit", Group.CALCULUS),
 
-    /** `Factor` — the inverse of expand. */
-    FACTOR,
+    // --- V5: linear algebra ---------------------------------------------
+    DETERMINANT("det", Group.MATRIX),
+    INVERSE("inverse", Group.MATRIX),
+    EIGENVALUES("eigenvalues", Group.MATRIX),
+    ROW_REDUCE("row reduce", Group.MATRIX),
+    TRANSPOSE("transpose", Group.MATRIX),
+    RANK("rank", Group.MATRIX);
 
-    /** Solve an equation for its unknown. */
-    SOLVE,
+    enum class Group { CORE, ALGEBRA, CALCULUS, MATRIX }
+
+    /** Actions that need a variable to work with respect to. */
+    val needsVariable: Boolean
+        get() = this == DIFFERENTIATE || this == INTEGRATE || this == SOLVE || this == LIMIT
 }

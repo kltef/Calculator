@@ -36,5 +36,10 @@ internal object SymjaConfiguration {
         Config.DISABLE_JMX = true
         Config.SWING_PLOT_FRAME = false
         Config.SHOW_STACKTRACE = false
+
+        // Symja wraps long output on its own width heuristic, so the same
+        // matrix can come back on one line or several. Formatting belongs to
+        // the UI, so wrapping is turned off and ResultFormatter stacks rows.
+        Config.MAX_OUTPUT_LINE = Int.MAX_VALUE
     }
 }

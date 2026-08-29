@@ -140,17 +140,56 @@ class CasEngine(
                     )
                 }
                 if (expression.isBlank()) return CalcResult.Empty
-                finish(evalRaw(wrap(substituted(expression), action)))
+
+                // Calculus works with respect to a variable, which must stay
+                // symbolic; everything else substitutes bindings as usual.
+                val variable = if (action.needsVariable) chooseVariable(expression) else null
+                if (action.needsVariable && variable == null) {
+                    return CalcResult.Failure(
+                        CalcResult.ErrorKind.SYNTAX,
+                        "There's no variable to work with — add one like x",
+                    )
+                }
+                val exclude = setOfNotNull(variable)
+                val wrapped = wrap(substituted(expression, exclude), action, variable)
+                val result = evalRaw(wrapped)
+                val steps = if (action == Action.DIFFERENTIATE && variable != null) {
+                    stepSolver.derivativeSteps(substituted(expression, exclude), variable)
+                        ?: emptyList()
+                } else {
+                    emptyList()
+                }
+                finish(result, steps, noteFor(action, variable))
             }
         }
     }
 
-    private fun wrap(expression: String, action: Action): String = when (action) {
+    private fun wrap(expression: String, action: Action, variable: String?): String = when (action) {
         Action.EVALUATE -> expression
         Action.SIMPLIFY -> "Simplify($expression)"
         Action.EXPAND -> "Expand($expression)"
         Action.FACTOR -> "Factor($expression)"
         Action.SOLVE -> expression // handled separately
+
+        Action.DIFFERENTIATE -> "D($expression, $variable)"
+        Action.INTEGRATE -> "Integrate($expression, $variable)"
+        // Without a stated approach point, the interesting limit is at zero;
+        // `limit(f, x, a)` typed directly covers every other case.
+        Action.LIMIT -> "Limit($expression, $variable -> 0)"
+
+        Action.DETERMINANT -> "Det($expression)"
+        Action.INVERSE -> "Inverse($expression)"
+        Action.EIGENVALUES -> "Eigenvalues($expression)"
+        Action.ROW_REDUCE -> "RowReduce($expression)"
+        Action.TRANSPOSE -> "Transpose($expression)"
+        Action.RANK -> "MatrixRank($expression)"
+    }
+
+    private fun noteFor(action: Action, variable: String?): String? = when (action) {
+        Action.DIFFERENTIATE -> variable?.let { "Differentiated with respect to $it" }
+        Action.INTEGRATE -> variable?.let { "Antiderivative with respect to $it (＋C)" }
+        Action.LIMIT -> variable?.let { "Limit as $it → 0" }
+        else -> null
     }
 
     private fun finish(result: IExpr, steps: List<SolutionStep> = emptyList(), note: String? = null): CalcResult {
@@ -228,12 +267,17 @@ class CasEngine(
             solutions.getAt(1).isList &&
             solutions.getAt(1).size() == 1
 
+    private fun chooseUnknown(left: String, right: String): String? =
+        chooseVariable("($left) - ($right)")
+
     /**
-     * Picks the variable to solve for: the single free symbol, preferring `x`
-     * when several are present (which is what people mean nearly every time).
+     * Picks the variable an operation acts on: the single free symbol,
+     * preferring `x` when several are present (which is what people mean nearly
+     * every time). `Hold` keeps the expression from evaluating first, so the
+     * symbols are read from what was written.
      */
-    private fun chooseUnknown(left: String, right: String): String? {
-        val symbols = freeSymbols(evalRaw("Hold(($left) - ($right))")) - variables.names()
+    private fun chooseVariable(expression: String): String? {
+        val symbols = freeSymbols(evalRaw("Hold($expression)")) - variables.names()
         return when {
             symbols.isEmpty() -> null
             "x" in symbols -> "x"
@@ -276,6 +320,73 @@ class CasEngine(
             }
         }
         return rendered.takeIf { it.isNotEmpty() }?.joinToString(",  ")
+    }
+
+    // --- plotting ----------------------------------------------------------
+
+    /**
+     * Compiles [input] into a numeric function of [variable], for plotting.
+     *
+     * The expression is parsed and its variable bindings applied once; each
+     * sample then substitutes a number and evaluates numerically. Plotting asks
+     * "roughly what shape is this" hundreds of times per redraw, so it must not
+     * go through exact evaluation — and it does not need to.
+     *
+     * Returns null if the input cannot be parsed. The returned function yields
+     * `NaN` wherever the expression is undefined; callers treat that as a gap
+     * rather than an error, because `1/x` at 0 is a hole in a curve, not a
+     * failed calculation.
+     */
+    fun numericFunction(
+        input: String,
+        variable: String,
+        angleMode: AngleMode = AngleMode.RADIANS,
+    ): ((Double) -> Double)? {
+        val normalized = try {
+            InputNormalizer.normalize(input, angleMode)
+        } catch (e: RuntimeException) {
+            return null
+        }
+        if (normalized.isBlank()) return null
+
+        val prepared = try {
+            evalRaw("Hold(${substituted(normalized, setOf(variable))})")
+        } catch (e: RuntimeException) {
+            return null
+        } catch (e: SyntaxError) {
+            return null
+        }
+        // Unwrap Hold, keeping the expression unevaluated but parsed.
+        val body = if (prepared.size() == 2) prepared.getAt(1) else return null
+        val symbol = F.symbol(variable)
+
+        return { x ->
+            try {
+                val substitutedExpr = F.subst(body, F.Rule(symbol, F.num(x)))
+                val value = evaluator.evalEngine.evalN(substitutedExpr)
+                if (value.isReal || value.isNumber) value.evalf() else Double.NaN
+            } catch (e: RuntimeException) {
+                Double.NaN
+            } catch (e: StackOverflowError) {
+                Double.NaN
+            }
+        }
+    }
+
+    /** The free variable a plot should be drawn against, if there is one. */
+    fun plotVariable(input: String, angleMode: AngleMode = AngleMode.RADIANS): String? {
+        val normalized = try {
+            InputNormalizer.normalize(input, angleMode)
+        } catch (e: RuntimeException) {
+            return null
+        }
+        return try {
+            chooseVariable(normalized)
+        } catch (e: RuntimeException) {
+            null
+        } catch (e: SyntaxError) {
+            null
+        }
     }
 
     // --- plumbing ----------------------------------------------------------

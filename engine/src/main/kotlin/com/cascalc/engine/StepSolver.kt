@@ -110,6 +110,47 @@ class StepSolver(private val eval: (String) -> IExpr) {
         return if (isZero(discriminant)) listOf(plus) else listOf(minus, plus)
     }
 
+    /**
+     * A worked derivative for polynomials, using the power rule term by term.
+     *
+     * Non-polynomials (products, chains, trig) need the product/quotient/chain
+     * rules, whose derivations are a much larger job; they return null and are
+     * differentiated without a shown method.
+     */
+    fun derivativeSteps(expression: String, variable: String): List<SolutionStep>? {
+        val expanded = eval("Expand($expression)").toString()
+        if (!isTrue("PolynomialQ($expanded, $variable)")) return null
+
+        val coefficients = coefficientList(expanded, variable) ?: return null
+        if (coefficients.size < 2) return null
+        if (coefficients.size > MAX_STEP_TERMS) return null
+
+        val steps = mutableListOf<SolutionStep>()
+        steps += SolutionStep(
+            "Differentiate term by term, using the power rule d/d$variable ($variable^n) = n·$variable^(n-1).",
+            "${display(expanded)}",
+        )
+
+        // Ascending powers; the constant term differentiates away.
+        val termLines = coefficients.mapIndexedNotNull { power, coefficient ->
+            if (isZero(coefficient)) return@mapIndexedNotNull null
+            when (power) {
+                0 -> "d/d$variable (${display(coefficient)}) = 0"
+                1 -> "d/d$variable (${display("($coefficient)*$variable")}) = ${display(coefficient)}"
+                else -> "d/d$variable (${display("($coefficient)*$variable^$power")}) = " +
+                    display("($coefficient)*$power*$variable^${power - 1}")
+            }
+        }
+        if (termLines.isEmpty()) return null
+        steps += SolutionStep("Each term separately.", termLines.joinToString("\n"))
+
+        steps += SolutionStep(
+            "Add the results.",
+            display("D($expanded, $variable)"),
+        )
+        return steps
+    }
+
     /** `CoefficientList` ascending: index 0 is the constant term. */
     private fun coefficientList(expression: String, unknown: String): List<String>? {
         val list = eval("CoefficientList($expression, $unknown)")
@@ -124,4 +165,9 @@ class StepSolver(private val eval: (String) -> IExpr) {
         eval("PossibleZeroQ($symjaExpression)").isTrue
 
     private fun isTrue(symjaExpression: String): Boolean = eval(symjaExpression).isTrue
+
+    private companion object {
+        /** Beyond this a term-by-term derivation is noise rather than help. */
+        const val MAX_STEP_TERMS = 12
+    }
 }

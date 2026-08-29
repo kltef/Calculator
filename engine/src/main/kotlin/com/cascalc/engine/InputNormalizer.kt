@@ -34,6 +34,34 @@ object InputNormalizer {
             "round" to "Round", "sign" to "Sign", "gcd" to "GCD", "lcm" to "LCM",
             "max" to "Max", "min" to "Min", "mod" to "Mod", "factorial" to "Factorial",
             "nthroot" to "Surd",
+
+            // V4 - calculus
+            "d" to "D", "diff" to "D", "derivative" to "D",
+            "integrate" to "Integrate", "integral" to "Integrate",
+            "limit" to "Limit", "sum" to "Sum", "product" to "Product",
+            "series" to "Series", "taylor" to "Series",
+
+            // V5 - linear algebra
+            "det" to "Det", "determinant" to "Det", "inverse" to "Inverse",
+            "transpose" to "Transpose", "eigenvalues" to "Eigenvalues",
+            "eigenvectors" to "Eigenvectors", "rowreduce" to "RowReduce",
+            "rref" to "RowReduce", "rank" to "MatrixRank", "matrixrank" to "MatrixRank",
+            "linearsolve" to "LinearSolve", "identity" to "IdentityMatrix",
+            "dot" to "Dot", "cross" to "Cross", "norm" to "Norm", "trace" to "Tr",
+
+            // V6 - number theory
+            "isprime" to "PrimeQ", "primeq" to "PrimeQ", "prime" to "Prime",
+            "nextprime" to "NextPrime", "factorint" to "FactorInteger",
+            "factorinteger" to "FactorInteger", "divisors" to "Divisors",
+            "eulerphi" to "EulerPhi", "totient" to "EulerPhi", "binomial" to "Binomial",
+            "fibonacci" to "Fibonacci", "powermod" to "PowerMod",
+
+            // V6 - statistics
+            "mean" to "Mean", "median" to "Median", "mode" to "Commonest",
+            "stdev" to "StandardDeviation", "sd" to "StandardDeviation",
+            "standarddeviation" to "StandardDeviation", "variance" to "Variance",
+            "var" to "Variance", "total" to "Total", "sort" to "Sort",
+            "quantile" to "Quantile", "correlation" to "Correlation",
         ).forEach { (k, v) -> put(k, v) }
     }
 
