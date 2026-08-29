@@ -52,6 +52,13 @@ android {
                 "/META-INF/NOTICE*",
                 "META-INF/versions/**",
             )
+            // matheclipse-external shades jgrapht, so the same schema files
+            // arrive twice. They are only used by GraphML import/export, which
+            // the calculator never touches; either copy is fine.
+            pickFirsts += setOf(
+                "**/*.xsd",
+                "**/*.properties",
+            )
         }
     }
 
@@ -74,5 +81,5 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.3")
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 }

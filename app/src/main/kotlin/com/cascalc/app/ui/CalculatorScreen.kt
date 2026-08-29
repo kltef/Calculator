@@ -22,6 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -110,10 +112,12 @@ private fun TopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
+        val angleModeLabel = stringResource(R.string.angle_mode)
         FilterChip(
             selected = angleMode == AngleMode.DEGREES,
             onClick = onToggleAngleMode,
             label = { Text(if (angleMode == AngleMode.DEGREES) "DEG" else "RAD") },
+            modifier = Modifier.semantics { contentDescription = angleModeLabel },
         )
         IconButton(onClick = onToggleHistory) {
             Icon(

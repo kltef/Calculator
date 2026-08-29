@@ -4,5 +4,16 @@
 -keep class org.hipparchus.** { *; }
 -dontwarn org.matheclipse.**
 -dontwarn org.hipparchus.**
--dontwarn com.google.common.**
+
+# Symja's arbitrary-precision backend (apfloat) sizes its cache from the JVM
+# management API, which does not exist on Android. It falls back to defaults.
+-dontwarn java.lang.management.**
+
+# Guava compiles against the annotation-processing API for its @Weak/@Nullable
+# style annotations; none of it is reachable at runtime.
+-dontwarn javax.lang.model.**
 -dontwarn javax.annotation.**
+-dontwarn com.google.common.**
+
+# jgrapht and friends ship optional OSGi service lookup that Android never uses.
+-dontwarn org.osgi.**

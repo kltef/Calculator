@@ -39,8 +39,10 @@ calculus, AR) can all be built as new front-ends over the same evaluator.
 # The math engine and its tests — no Android SDK required.
 ./gradlew :engine:test
 
-# The Android app — needs an Android SDK.
+# Everything, including the app — needs an Android SDK.
+./gradlew build
 ./gradlew :app:assembleDebug
+./gradlew :app:assembleRelease   # R8-shrunk
 ```
 
 `settings.gradle.kts` only includes `:app` when an Android SDK is actually
@@ -48,7 +50,23 @@ present (`ANDROID_HOME`, `ANDROID_SDK_ROOT`, or `sdk.dir` in
 `local.properties`). Without one, Gradle configures and tests `:engine` alone
 instead of failing outright.
 
-Minimum SDK 26, target/compile SDK 35.
+Minimum SDK 26, target/compile SDK 35. The debug APK is ~34 MB and the
+R8-shrunk release ~8 MB; Symja's function catalogue is most of that.
+
+### Symja on Android
+
+Two things Symja needs that a plain Android build doesn't give it:
+
+- **Core library desugaring** (`isCoreLibraryDesugaringEnabled`), because Symja
+  uses `java.time` and other APIs newer than minSdk 26.
+- **Keep rules.** Symja resolves much of its function catalogue reflectively, so
+  `proguard-rules.pro` keeps `org.matheclipse.**` and `org.hipparchus.**`
+  wholesale. It also silences references its dependencies make to desktop-only
+  APIs (`java.lang.management` from apfloat, `javax.lang.model` from Guava,
+  `org.osgi` from jgrapht) which are unreachable on Android.
+
+`matheclipse-external` shades jgrapht, so a few resources (`*.xsd`) arrive twice
+and are resolved with `pickFirsts`.
 
 ## Input notation
 

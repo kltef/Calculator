@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A division sign over a fraction bar: exact fractions are the point of V1. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,52h40v5h-40z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,36m-5,0a5,5 0 1,0 10,0a5,5 0 1,0 -10,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,73m-5,0a5,5 0 1,0 10,0a5,5 0 1,0 -10,0" />
+</vector>
