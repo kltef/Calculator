@@ -20,7 +20,14 @@ class CasEngine(
     private val timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS,
 ) {
 
-    private val evaluator = ExprEvaluator(false, RECURSION_LIMIT)
+    private val evaluator: ExprEvaluator
+
+    init {
+        // Must happen before any reference to F, which ExprEvaluator triggers.
+        SymjaConfiguration.apply()
+        evaluator = ExprEvaluator(false, OUTPUT_PRECISION)
+    }
+
     private val stepSolver = StepSolver(::evalRaw)
 
     val variables = VariableStore()
@@ -325,11 +332,13 @@ class CasEngine(
 
     companion object {
         const val DEFAULT_TIMEOUT_MILLIS: Long = 5_000
-        private const val RECURSION_LIMIT: Short = 256
 
-        init {
-            // Symja's symbol tables are expensive to build; warm them once.
-            F.initSymbols()
-        }
+        /**
+         * Digits Symja keeps for numeric output. This is the `ExprEvaluator`
+         * precision argument, not a recursion limit — an earlier version of
+         * this file named it wrongly and passed 256, which pushed ordinary
+         * arithmetic onto the arbitrary-precision backend for no benefit.
+         */
+        private const val OUTPUT_PRECISION: Short = 30
     }
 }

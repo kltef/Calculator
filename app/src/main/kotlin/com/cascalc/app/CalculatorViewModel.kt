@@ -67,6 +67,8 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 store.save(entries)
             }
         }
+        // Start Symja now, on the engine thread, rather than on the first tap.
+        viewModelScope.launch { session.warmUp() }
         viewModelScope.launch {
             session.variables.collect { variables ->
                 _uiState.value = _uiState.value.copy(variables = variables)

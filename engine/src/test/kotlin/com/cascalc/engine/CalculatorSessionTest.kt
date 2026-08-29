@@ -55,6 +55,39 @@ class CalculatorSessionTest {
         }
     }
 
+    @Test fun `a failed engine startup is reported, not thrown`() = runBlocking {
+        // Symja initialisation failures surface as Errors, not Exceptions, and
+        // must not escape and kill the process.
+        val session = CalculatorSession(
+            engineFactory = { throw NoClassDefFoundError("java/awt/image/RenderedImage") },
+        )
+        session.use {
+            val result = it.preview("1 + 1", AngleMode.RADIANS)
+            assertTrue(result is CalcResult.Failure)
+            val failure = result as CalcResult.Failure
+            assertEquals(CalcResult.ErrorKind.INTERNAL, failure.kind)
+            assertTrue(failure.message.contains("couldn't start"))
+            assertTrue(failure.message.contains("RenderedImage"))
+        }
+    }
+
+    @Test fun `the engine is built on the engine thread, not the caller's`() = runBlocking {
+        // Constructing Symja takes seconds; doing it on the caller's thread is
+        // what freezes an Android app at startup.
+        var builtOn: String? = null
+        CalculatorSession(engineFactory = {
+            builtOn = Thread.currentThread().name
+            CasEngine()
+        }).use {
+            it.warmUp()
+            // kotlinx appends a coroutine tag to the thread name when debugging.
+            assertTrue(
+                "engine was built on '$builtOn'",
+                builtOn?.startsWith("cas-engine") == true,
+            )
+        }
+    }
+
     @Test fun `reset clears history`() = runBlocking {
         CalculatorSession().use { session ->
             session.submit("2 + 2", AngleMode.RADIANS)

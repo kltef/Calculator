@@ -92,7 +92,34 @@ R8-shrunk release ~8 MB; Symja's function catalogue is most of that.
 
 ### Symja on Android
 
-Two things Symja needs that a plain Android build doesn't give it:
+Symja is built for the desktop JVM, and parts of its builtin catalogue
+reference classes Android does not ship — `Export` pulls in
+`java.awt.image.RenderedImage`, the memory builtins want
+`java.lang.management`. Those references resolve while `F`'s static initialiser
+registers the catalogue, so the failure is a `NoClassDefFoundError` from inside
+library initialisation, before any app code runs.
+
+`SymjaConfiguration` sets the library's own switches before anything touches
+`F` — after that point they have no effect:
+
+```kotlin
+Config.FUZZY_PARSER = true              // gates registration of unsafe builtins
+Config.JAVA_AWT_DESKTOP_AVAILABLE = false
+Config.DISABLE_JMX = true
+```
+
+`FUZZY_PARSER` is badly named: it does not change the parser. Its only uses in
+the library gate registration of builtins needing a filesystem, Java
+reflection, a compiler, or image export. **What it costs:** `Export`, `Share`,
+the `File*`/`Read*`/`Write*` family, `JavaNew`/`LoadJavaClass`, `Compile`,
+`Trace`, `MemoryInUse`, and the user-facing pattern builtins (`Blank`,
+`Pattern`, `Clear`, `Unset`, `DownValues`). None are used by the calculator, and
+losing filesystem and reflection builtins is a security improvement on a mobile
+app. Everything the app does — exact arithmetic, `Simplify`, `Expand`,
+`Factor`, `Solve`, `ReplaceRepeated` — is unaffected, which
+`AndroidClassAvailabilityTest` and the rest of the suite verify.
+
+Two further things Symja needs that a plain Android build doesn't give it:
 
 - **Core library desugaring** (`isCoreLibraryDesugaringEnabled`), because Symja
   uses `java.time` and other APIs newer than minSdk 26.
@@ -152,7 +179,15 @@ results that arrive after the input has changed again.
 ./gradlew :engine:test
 ```
 
-75 tests covering input normalization (including degree-mode rewriting and
+79 tests covering input normalization (including degree-mode rewriting and
 implicit multiplication), exact evaluation, error classification, variable
 binding and cycle rejection, simplify/expand/factor, equation solving, the
 generated solution steps, the history model and the session wrapper.
+
+`AndroidClassAvailabilityTest` deserves a note: it loads the engine through a
+classloader that hides `java.awt`, `javax.imageio`, `java.lang.management`,
+`sun.misc` and `org.osgi`, reproducing Android's class availability on the JVM.
+Without it, a build can compile, shrink and pass every other test and still die
+on a device the moment library initialisation touches a desktop-only class.
+It is stricter than ART in one respect — HotSpot's verifier resolves types
+eagerly where ART tolerates unresolvable ones — so it errs toward safety.
