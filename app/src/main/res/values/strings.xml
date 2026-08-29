@@ -23,4 +23,5 @@
     <string name="action_solve">Solve</string>
     <string name="show_steps">Show steps</string>
     <string name="hide_steps">Hide steps</string>
+    <string name="voice_input">Voice input</string>
 </resources>

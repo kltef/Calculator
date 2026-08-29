@@ -95,6 +95,22 @@ class CalculatorSession(
     }
 
     /**
+     * Compiles an expression into a numeric function for plotting.
+     *
+     * Compilation happens on the engine thread. The returned function calls
+     * back into Symja, so callers must not sample it from several threads at
+     * once — one sampling coroutine at a time.
+     */
+    suspend fun numericFunction(
+        expression: String,
+        angleMode: AngleMode,
+    ): ((Double) -> Double)? = withContext(dispatcher) {
+        val engine = engineOrNull() ?: return@withContext null
+        val variable = engine.plotVariable(expression, angleMode) ?: DEFAULT_PLOT_VARIABLE
+        engine.numericFunction(expression, variable, angleMode)
+    }
+
+    /**
      * Builds the engine ahead of first use, so the wait happens while the user
      * is still looking at an empty calculator rather than after their first tap.
      */
@@ -151,6 +167,8 @@ class CalculatorSession(
     }
 
     private companion object {
+        /** A constant expression still plots — as a horizontal line against x. */
+        const val DEFAULT_PLOT_VARIABLE = "x"
         const val MAX_CAUSE_DEPTH = 10
         const val MAX_STACK_FRAMES = 25
     }

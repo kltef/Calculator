@@ -46,6 +46,12 @@ class InputNormalizerTest {
         assertEquals("Max(1,2)", norm("max(1,2)"))
     }
 
+    @Test fun `multiplies adjacent numbers rather than joining them`() {
+        // `20/100 150` must not become `20/100150`.
+        assertEquals("2*3", norm("2 3"))
+        assertEquals("20/100*150", norm("20% 150"))
+    }
+
     @Test fun `expands postfix percent`() {
         assertEquals("20/100", norm("20%"))
         assertEquals("150*20/100", norm("150*20%"))

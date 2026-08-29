@@ -169,7 +169,10 @@ object InputNormalizer {
         if (!prevEndsValue) return false
 
         return when (current.type) {
-            TokenType.NUMBER -> prev.type != TokenType.NUMBER
+            // Two numbers separated only by space mean multiplication, as they
+            // do in Mathematica. Without this they silently ran together:
+            // `20/100 150` became `20/100150`, a wrong answer with no error.
+            TokenType.NUMBER -> true
             TokenType.LPAREN -> true
             // `2x`, `2Sqrt(2)`, `(1+2)x` -- but never `Sqrt(` handled above.
             TokenType.IDENT -> true

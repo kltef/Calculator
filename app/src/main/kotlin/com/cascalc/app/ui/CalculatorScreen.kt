@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Functions
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -60,6 +61,10 @@ fun CalculatorScreen(
     onClearHistory: () -> Unit,
     onInsertVariable: (String) -> Unit,
     onDeleteVariable: (String) -> Unit,
+    onVoiceInput: () -> Unit,
+    onShare: () -> Unit,
+    onExportPdf: () -> Unit,
+    onGoToGraph: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -74,6 +79,7 @@ fun CalculatorScreen(
             onToggleAngleMode = onToggleAngleMode,
             onToggleHistory = onToggleHistory,
             onToggleVariables = onToggleVariables,
+            onVoiceInput = onVoiceInput,
         )
 
         AnimatedVisibility(visible = state.historyVisible) {
@@ -105,11 +111,27 @@ fun CalculatorScreen(
 
         ResultLine(state = state, error = error)
 
+        state.heard?.let { heard ->
+            Text(
+                text = heard,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         ActionBar(
             onAction = onAction,
             enabled = state.expression.isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
         )
+
+        if (state.committed != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onShare) { Text("Share") }
+                TextButton(onClick = onExportPdf) { Text("PDF") }
+                TextButton(onClick = onGoToGraph) { Text("Graph it") }
+            }
+        }
 
         if (state.steps.isNotEmpty()) {
             TextButton(onClick = onToggleSteps) {
@@ -144,6 +166,7 @@ private fun TopBar(
     onToggleAngleMode: () -> Unit,
     onToggleHistory: () -> Unit,
     onToggleVariables: () -> Unit,
+    onVoiceInput: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -158,6 +181,12 @@ private fun TopBar(
             modifier = Modifier.semantics { contentDescription = angleModeLabel },
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onVoiceInput) {
+                Icon(
+                    imageVector = Icons.Filled.Mic,
+                    contentDescription = stringResource(R.string.voice_input),
+                )
+            }
             IconButton(onClick = onToggleVariables) {
                 Icon(
                     imageVector = Icons.Filled.Functions,

@@ -3,9 +3,14 @@
 A computer-algebra calculator for Android. Kotlin, Jetpack Compose, and
 [Symja](https://github.com/axkr/symja_android_library) for the math.
 
-Currently at **V2** of the [roadmap](ROADMAP.md): exact arithmetic and
-fractions, plus variables, symbolic manipulation, equation solving and
-step-by-step working.
+**V1–V6 of the [roadmap](ROADMAP.md) are shipped, V7 partly, V8 not started.**
+Exact arithmetic and fractions; variables, symbolic algebra and step-by-step
+solving; graphing; calculus; linear algebra; natural-language and voice input.
+The roadmap states plainly which V7 items are missing and why V8 has not begun.
+
+Seven screens: calculator, graph, matrix, tools, practice, formulas, settings.
+All share one engine, so a variable defined on the calculator is usable when
+graphing.
 
 ## Why exact arithmetic matters
 
@@ -179,10 +184,13 @@ results that arrive after the input has changed again.
 ./gradlew :engine:test
 ```
 
-79 tests covering input normalization (including degree-mode rewriting and
+152 tests covering input normalization (including degree-mode rewriting and
 implicit multiplication), exact evaluation, error classification, variable
 binding and cycle rejection, simplify/expand/factor, equation solving, the
-generated solution steps, the history model and the session wrapper.
+generated solution steps, the history model, the session wrapper, plotting
+(including pole splitting and root finding), calculus, linear algebra, unit
+conversion, base conversion, the natural-language parser and the practice
+grader.
 
 `AndroidClassAvailabilityTest` deserves a note: it loads the engine through a
 classloader that hides `java.awt`, `javax.imageio`, `java.lang.management`,

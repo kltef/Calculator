@@ -2,7 +2,8 @@
 
 Native Android (Kotlin), math engine powered by [Symja](https://github.com/axkr/symja_android_library).
 
-**Status: V1 and V2 shipped.** V3–V8 below are planned and unimplemented.
+**Status: V1–V6 shipped. V7 partly shipped. V8 not started.** See the
+per-version notes; what is *not* built is stated plainly rather than implied.
 
 ---
 
@@ -51,63 +52,119 @@ still solved, but reports no steps rather than inventing a derivation.
 Extending step coverage (systems, cubics, factoring by grouping) means adding
 methods to `StepSolver`, not changing the solver.
 
-## V3 — Graphing
+## V3 — Graphing ✅
 
-- Plot `f(x)` over a range, with pan/zoom
-- Multiple functions on one graph
-- Trace mode (tap curve for coordinates)
-- Visual root/intersection finding, feeding back into V2's solver
+- [x] Plot `f(x)` over a range, with pan/zoom
+- [x] Multiple functions on one graph (up to four)
+- [x] Trace mode (tap curve for coordinates)
+- [x] Visual root/intersection finding, feeding back into V2's solver
 
-## V4 — Calculus
+`Plotter` samples in graph coordinates and the canvas only maps to pixels, so
+zooming re-samples rather than stretching an image. Two details that matter:
+curves are **split at poles** — `1/x` is not drawn joined through infinity —
+and root finding **excludes** those poles, because a sign change at an
+asymptote is not a root. Roots come from sign changes refined by bisection;
+intersections are the roots of a difference.
 
-- Numeric + symbolic derivatives
-- Definite/indefinite integrals
-- Limits
-- Tangent lines and area-under-curve shading on V3's graphs
+## V4 — Calculus ✅ (mostly)
 
-## V5 — Matrices & Linear Algebra
+- [x] Numeric + symbolic derivatives
+- [x] Definite/indefinite integrals
+- [x] Limits
+- [ ] Tangent lines and area-under-curve shading on V3's graphs — **not built**
 
-- Matrix input/editing UI
-- Determinants, inverses, eigenvalues, row reduction
-- Solve linear systems using V2's solver core
+Derivatives, integrals and limits are actions with the variable inferred, plus
+typed `d`/`integrate`/`limit` syntax for higher derivatives, definite bounds and
+limits at a stated point. `StepSolver` shows a power-rule derivation for
+polynomial derivatives; product/quotient/chain rules report no steps rather
+than inventing a method.
 
-## V6 — Natural Language Input
+The graph overlays are the gap: they need the graph screen to accept an
+expression *and* a marked point from the calculus screen, which is a
+cross-screen state change rather than new maths.
 
-- Voice input (Android `SpeechRecognizer`)
-- Natural language → expression parsing ("what's 20% of 150 plus tax")
-- **Decision point:** local rule-based parser (offline, limited) vs. LLM-backed
-  (flexible, needs network/API)
-- Catch-all math extras: unit conversion, constants library, number theory,
-  statistics, base conversion
+## V5 — Matrices & Linear Algebra ✅
 
-## V7 — Polish, Ecosystem & Everything Else
+- [x] Matrix input/editing UI (resizable grid editor)
+- [x] Determinants, inverses, eigenvalues, row reduction, transpose, rank
+- [x] Solve linear systems (`linearsolve`) through the shared engine
 
-- Camera/OCR input — photograph handwritten or textbook equations and parse them
-- Cloud sync/backup of history and saved equations
-- Widgets (home-screen calculator, lock-screen shortcut)
-- Custom themes, adjustable UI density
-- Export: graphs as images, step-by-step solutions as PDF/notes
-- Sharing: send equation + result as link or image
-- Education tools: practice problem generator + grading, "explain this step,"
-  formula reference sheet
-- Collaboration: shared live workspaces, public solved-problem links
-- Programmability: scripting/macros, plugin system for niche domains
-  (chemistry, physics, finance)
-- Performance pass: cold-start time, Symja call latency on complex ops
-- Monetization structure decisions (offline vs. cloud tiers, ads vs. free)
+Matrix results are formatted by `ResultFormatter`, not Symja: Symja wraps on its
+own width heuristic, so the same matrix came back on one line or several
+depending on how wide the numbers were.
 
-## V8 — AR Overlay
+## V6 — Natural Language Input ✅
 
-- Live camera feed with continuous (interval-based, not per-frame) OCR
-- Equation detection + tracking via ARCore anchors, locked to the physical page
-  as the camera moves
-- Solution overlay rendered in space next to/over the written equation
-- Graphs anchored in space at real scale relative to the writing surface
-- Tap-to-expand step-by-step mode rendered as page annotations
-- Symja remains the sole math engine — AR is a new rendering/input layer, not a
-  new solver
-- **Biggest risk:** tracking stability across lighting/hand movement — prototype
-  standalone before full integration
+- [x] Voice input (system recogniser intent)
+- [x] Natural language → expression parsing
+- [x] **Decision point resolved: local rule-based parser.**
+- [x] Catch-all math extras: unit conversion, constants library, number theory,
+      statistics, base conversion
+
+**Why local, not LLM-backed.** A network round trip for "twenty percent of 150"
+fails on a train, costs money per tap, adds latency to something that must feel
+instant, and sends the user's working to a third party. The price is a fixed
+vocabulary, so the parser reports `NotUnderstood` rather than guessing — including
+for this roadmap's own example, `"what's 20% of 150 plus tax"`: **"tax" names no
+rate**, so any number would be invented. The `20% of 150` part parses fine.
+
+Voice uses the recogniser *intent* rather than a bound `SpeechRecognizer`: it
+needs no `RECORD_AUDIO` permission of ours and works without on-device
+recognition.
+
+Unit conversion is a local table because Symja's `UnitConvert` is unavailable in
+this build. Temperature is affine (offset, not ratio) — 0 °C is 32 °F, not 0 °F.
+
+## V7 — Polish, Ecosystem & Everything Else — partly shipped
+
+Built:
+
+- [x] Widgets — home-screen widget showing the last result
+- [x] Custom themes (system/light/dark, dynamic colour), adjustable UI density
+- [x] Export: step-by-step solutions as PDF, results as text
+- [x] Sharing: equation + result via the system share sheet
+- [x] Education tools: practice problem generator + grading, formula reference
+- [x] Performance: engine built off the main thread and warmed at startup;
+      plotting compiles once and samples numerically instead of exactly
+
+Not built, with reasons:
+
+- [ ] **Camera/OCR input** — needs ML Kit or an equivalent, which is a large
+      dependency that cannot be exercised in this environment (no camera, no
+      emulator). Shipping it untested into a working app is how the startup
+      crash happened.
+- [ ] **Cloud sync/backup** — needs a backend, an account system and a privacy
+      decision. There is nothing to write until those exist.
+- [ ] **Collaboration** (shared workspaces, public links) — same; a backend
+      product, not a client feature.
+- [ ] **Plugin system / scripting** — loading third-party code into the app is a
+      security design question first. Note that `FUZZY_PARSER` currently
+      *disables* Symja's `Compile`, `JavaNew` and filesystem builtins on purpose.
+- [ ] **Graph export as image** — the share plumbing exists (`Sharing.shareImage`)
+      but nothing captures the canvas to a bitmap yet.
+- [ ] **"Explain this step"** — needs per-step commentary beyond what
+      `StepSolver` generates.
+- [ ] **Monetization structure** — a business decision, not an implementation.
+
+## V8 — AR Overlay — not started
+
+- [ ] Live camera feed with continuous (interval-based, not per-frame) OCR
+- [ ] Equation detection + tracking via ARCore anchors
+- [ ] Solution overlay rendered in space
+- [ ] Graphs anchored in space at real scale
+- [ ] Tap-to-expand step-by-step as page annotations
+
+**Why nothing was written.** This roadmap already answers it: *"prototype
+standalone before full integration"*, with tracking stability named as the
+biggest risk. That prototype needs an ARCore-capable phone in hand, under real
+lighting, with real handwriting. None of that can be approximated here — there
+is no camera, no emulator and no ARCore. Writing an AR module blind would
+produce code that compiles and cannot be trusted, which is exactly the failure
+mode that produced the startup crash earlier in this project.
+
+The prerequisite is V7's OCR: AR is a rendering layer over the same recognition
+and the same solver. Build and validate camera OCR on a device first, then
+anchor it.
 
 ---
 

@@ -8,6 +8,7 @@ import com.cascalc.engine.AngleMode
 import com.cascalc.engine.CalcResult
 import com.cascalc.engine.CalculatorSession
 import com.cascalc.engine.HistoryEntry
+import com.cascalc.engine.NaturalLanguageParser
 import com.cascalc.engine.SolutionStep
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -32,6 +33,8 @@ data class CalculatorUiState(
     val committed: CalcResult.Success? = null,
     val steps: List<SolutionStep> = emptyList(),
     val stepsVisible: Boolean = false,
+    /** What the voice parser made of the last spoken phrase. */
+    val heard: String? = null,
 ) {
     /** Errors are hidden while typing — half-typed input is not a mistake yet. */
     val previewText: String? = (preview as? CalcResult.Success)?.exact
@@ -44,7 +47,10 @@ data class CalculatorUiState(
 class CalculatorViewModel(application: Application) : AndroidViewModel(application) {
 
     private val store = HistoryStore(application)
-    private val session = CalculatorSession()
+
+    // The engine is shared across screens, so it is owned by the Application
+    // rather than by this ViewModel - see CasCalculatorApp.
+    private val session = (application as CasCalculatorApp).session
 
     private val _uiState = MutableStateFlow(CalculatorUiState())
     val uiState: StateFlow<CalculatorUiState> = _uiState.asStateFlow()
@@ -68,6 +74,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             session.history.entries.collect { entries ->
                 _uiState.value = _uiState.value.copy(history = entries)
                 store.save(entries)
+                CalculatorWidget.refresh(getApplication())
             }
         }
         // Start Symja now, on the engine thread, rather than on the first tap.
@@ -85,6 +92,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.value = current.copy(
             expression = text,
             selection = selection,
+            heard = if (text == current.expression) current.heard else null,
             // Steps belong to the expression that produced them.
             committed = if (text == current.expression) current.committed else null,
             steps = if (text == current.expression) current.steps else emptyList(),
@@ -154,6 +162,31 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     fun deleteVariable(name: String) {
         viewModelScope.launch { session.clearVariable(name) }
+    }
+
+    /**
+     * Handles a spoken phrase.
+     *
+     * The transcript goes through the natural-language parser first. If it is
+     * not understood the raw words are put in the editor anyway, so the user can
+     * see what was heard and fix it, rather than the tap silently doing nothing.
+     */
+    fun onSpokenInput(transcript: String) {
+        when (val parsed = NaturalLanguageParser.parse(transcript)) {
+            is NaturalLanguageParser.Result.Parsed -> {
+                onExpressionChanged(
+                    parsed.expression,
+                    Selection(parsed.expression.length, parsed.expression.length),
+                )
+                _uiState.value = _uiState.value.copy(heard = parsed.interpretation)
+            }
+            NaturalLanguageParser.Result.NotUnderstood -> {
+                onExpressionChanged(transcript, Selection(transcript.length, transcript.length))
+                _uiState.value = _uiState.value.copy(
+                    heard = "Heard \"$transcript\" but couldn't read it as a calculation",
+                )
+            }
+        }
     }
 
     fun evaluate() = run(Action.EVALUATE)
@@ -234,11 +267,6 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.value = _uiState.value.copy(preview = result)
             }
         }
-    }
-
-    override fun onCleared() {
-        session.close()
-        super.onCleared()
     }
 
     private companion object {

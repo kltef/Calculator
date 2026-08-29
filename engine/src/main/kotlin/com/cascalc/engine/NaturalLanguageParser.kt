@@ -45,6 +45,9 @@ object NaturalLanguageParser {
         "cubed" to "^3",
         "percent of" to "% *",
         "per cent of" to "% *",
+        // The symbol form: "20% of 150". Without this, "of" is dropped as
+        // filler and the two numbers are left with no operator between them.
+        "% of" to "% *",
         "percent" to "%",
         "per cent" to "%",
         "plus" to "+",
