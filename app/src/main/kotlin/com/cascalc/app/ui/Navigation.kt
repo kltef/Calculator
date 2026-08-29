@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.Grid4x4
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.Icon
@@ -23,6 +24,7 @@ enum class Screen(val label: String, val icon: ImageVector) {
     GRAPH("Graph", Icons.Filled.ShowChart),
     MATRIX("Matrix", Icons.Filled.Grid4x4),
     TOOLS("Tools", Icons.Filled.Functions),
+    AR("AR", Icons.Filled.ViewInAr),
     PRACTICE("Practice", Icons.Filled.School),
     REFERENCE("Formulas", Icons.Filled.MenuBook),
     SETTINGS("Settings", Icons.Filled.Settings),

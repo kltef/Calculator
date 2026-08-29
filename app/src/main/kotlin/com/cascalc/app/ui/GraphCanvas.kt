@@ -20,8 +20,10 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cascalc.app.GraphMarker
+import com.cascalc.engine.AreaUnderCurve
 import com.cascalc.engine.PlotCurve
 import com.cascalc.engine.PlotWindow
+import com.cascalc.engine.TangentLine
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.log10
@@ -49,6 +51,10 @@ fun GraphCanvas(
     curves: List<PlotCurve>,
     markers: List<GraphMarker>,
     traceEnabled: Boolean,
+    tangent: TangentLine? = null,
+    area: AreaUnderCurve? = null,
+    /** 0..1; curves are revealed along their length as this animates up. */
+    reveal: Float = 1f,
     onTransform: (panX: Double, panY: Double, zoom: Double, focusX: Double, focusY: Double) -> Unit,
     onTrace: (Double) -> Unit,
     modifier: Modifier = Modifier,
@@ -84,9 +90,12 @@ fun GraphCanvas(
             },
     ) {
         drawGrid(window, gridColor, axisColor, textMeasurer)
+        // Shading sits under the curves so the line stays readable on top.
+        area?.let { drawArea(it, window, CurveColors[0].copy(alpha = 0.25f)) }
         curves.forEachIndexed { index, curve ->
-            drawCurve(curve, window, CurveColors[index % CurveColors.size])
+            drawCurve(curve, window, CurveColors[index % CurveColors.size], reveal)
         }
+        tangent?.let { drawTangent(it, window, markerColor) }
         markers.forEach { marker ->
             drawMarker(marker, window, markerColor, textMeasurer)
         }
@@ -158,12 +167,22 @@ private fun DrawScope.drawGrid(
     }
 }
 
-private fun DrawScope.drawCurve(curve: PlotCurve, window: PlotWindow, color: Color) {
+private fun DrawScope.drawCurve(
+    curve: PlotCurve,
+    window: PlotWindow,
+    color: Color,
+    reveal: Float = 1f,
+) {
     for (segment in curve.segments) {
         if (segment.size < 2) continue
+        // Draw only the leading fraction, so a new curve sweeps in rather than
+        // appearing all at once.
+        val visible = segment.take(
+            (segment.size * reveal.coerceIn(0f, 1f)).toInt().coerceAtLeast(2),
+        )
         val path = Path()
         var started = false
-        for (point in segment) {
+        for (point in visible) {
             // Clamp far-off-screen values so a near-vertical run does not blow
             // up the path; the segment split already handles true poles.
             val clampedY = point.y.coerceIn(
@@ -180,6 +199,30 @@ private fun DrawScope.drawCurve(curve: PlotCurve, window: PlotWindow, color: Col
         }
         drawPath(path, color, style = Stroke(width = 2.5f))
     }
+}
+
+/** Fills between the curve and the x-axis. */
+private fun DrawScope.drawArea(area: AreaUnderCurve, window: PlotWindow, color: Color) {
+    if (area.points.size < 2) return
+    val path = Path()
+    val first = area.points.first()
+    path.moveTo(graphToScreen(first.x, 0.0, window).x, graphToScreen(first.x, 0.0, window).y)
+    for (point in area.points) {
+        val screen = graphToScreen(point.x, point.y, window)
+        path.lineTo(screen.x, screen.y)
+    }
+    val last = area.points.last()
+    path.lineTo(graphToScreen(last.x, 0.0, window).x, graphToScreen(last.x, 0.0, window).y)
+    path.close()
+    drawPath(path, color)
+}
+
+/** The tangent, drawn across the window with a dot at the point of contact. */
+private fun DrawScope.drawTangent(tangent: TangentLine, window: PlotWindow, color: Color) {
+    val start = graphToScreen(window.xMin, tangent.valueAt(window.xMin), window)
+    val end = graphToScreen(window.xMax, tangent.valueAt(window.xMax), window)
+    drawLine(color, start, end, strokeWidth = 2f)
+    drawCircle(color, radius = 7f, center = graphToScreen(tangent.at.x, tangent.at.y, window))
 }
 
 @OptIn(ExperimentalTextApi::class)

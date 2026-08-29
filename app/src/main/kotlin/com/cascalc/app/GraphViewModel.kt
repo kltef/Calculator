@@ -4,10 +4,12 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cascalc.engine.AngleMode
+import com.cascalc.engine.AreaUnderCurve
 import com.cascalc.engine.PlotCurve
 import com.cascalc.engine.PlotPoint
 import com.cascalc.engine.PlotWindow
 import com.cascalc.engine.Plotter
+import com.cascalc.engine.TangentLine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +31,13 @@ data class GraphMarker(
     val label: String,
 )
 
+/** What the expressions mean: y of x, r of theta, or (x(t), y(t)). */
+enum class GraphMode(val label: String) {
+    FUNCTION("y = f(x)"),
+    POLAR("r = f(θ)"),
+    PARAMETRIC("x(t), y(t)"),
+}
+
 data class GraphUiState(
     val functions: List<GraphFunction> = listOf(GraphFunction(1, "")),
     val window: PlotWindow = PlotWindow.DEFAULT,
@@ -37,6 +46,11 @@ data class GraphUiState(
     val traceEnabled: Boolean = false,
     val error: String? = null,
     val computing: Boolean = false,
+    val mode: GraphMode = GraphMode.FUNCTION,
+    val showDerivative: Boolean = false,
+    val tangent: TangentLine? = null,
+    val area: AreaUnderCurve? = null,
+    val areaLabel: String? = null,
 )
 
 class GraphViewModel(application: Application) : AndroidViewModel(application) {
@@ -94,6 +108,74 @@ class GraphViewModel(application: Application) : AndroidViewModel(application) {
             markers = emptyList(),
         )
     }
+
+    fun setMode(mode: GraphMode) {
+        if (_uiState.value.mode == mode) return
+        _uiState.value = _uiState.value.copy(
+            mode = mode,
+            tangent = null,
+            area = null,
+            areaLabel = null,
+            markers = emptyList(),
+        )
+        replot()
+    }
+
+    /** Plots f'(x) alongside f(x). Only meaningful for y = f(x). */
+    fun toggleDerivative() {
+        _uiState.value = _uiState.value.copy(showDerivative = !_uiState.value.showDerivative)
+        replot()
+    }
+
+    /** V4 on V3's graph: the tangent to the first function at [x]. */
+    fun showTangentAt(x: Double) {
+        val target = firstVisible() ?: return
+        viewModelScope.launch {
+            val tangent = session.tangentAt(target.expression, x, angleMode)
+            _uiState.value = _uiState.value.copy(
+                tangent = tangent,
+                error = if (tangent == null) "No tangent there" else null,
+            )
+        }
+    }
+
+    fun clearOverlays() {
+        _uiState.value = _uiState.value.copy(tangent = null, area = null, areaLabel = null)
+    }
+
+    /**
+     * V4 on V3's graph: shades the area under the first function across the
+     * visible window, reporting the exact integral where Symja can find one and
+     * the numeric area otherwise.
+     */
+    fun shadeArea() {
+        val state = _uiState.value
+        val target = firstVisible() ?: return
+        val from = state.window.xMin
+        val to = state.window.xMax
+
+        viewModelScope.launch {
+            val f = compile(target.expression)
+            if (f == null) {
+                _uiState.value = _uiState.value.copy(error = "Can't read that function")
+                return@launch
+            }
+            val area = withContext(Dispatchers.Default) { Plotter(f).areaUnder(from, to) }
+            val exact = session.definiteIntegral(target.expression, from, to, angleMode)
+            _uiState.value = _uiState.value.copy(
+                area = area,
+                areaLabel = when {
+                    area == null -> null
+                    exact != null -> "∫ = $exact"
+                    else -> "∫ ≈ ${format(area.area)}"
+                },
+                error = if (area == null) "Can't shade that region" else null,
+            )
+        }
+    }
+
+    private fun firstVisible(): GraphFunction? =
+        _uiState.value.functions.firstOrNull { it.visible && it.expression.isNotBlank() }
 
     /** Pan and zoom, in graph units. Zoom is about [focusX], [focusY]. */
     fun transform(panX: Double, panY: Double, zoom: Double, focusX: Double, focusY: Double) {
@@ -181,22 +263,65 @@ class GraphViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         plotJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(computing = true)
-            val curves = withContext(Dispatchers.Default) {
-                state.functions
-                    .filter { it.visible && it.expression.isNotBlank() }
-                    .map { function ->
-                        val f = compile(function.expression)
-                        PlotCurve(
-                            expression = function.expression,
-                            segments = f?.let { Plotter(it).sample(state.window) } ?: emptyList(),
-                        )
-                    }
+            val visible = state.functions.filter { it.visible && it.expression.isNotBlank() }
+            val compiled = visible.map { it to compile(it.expression) }
+            val derivative = if (state.showDerivative && state.mode == GraphMode.FUNCTION) {
+                visible.firstOrNull()?.let { session.derivativeFunction(it.expression, angleMode) }
+            } else {
+                null
             }
-            val unplottable = curves.any { it.isEmpty }
+
+            val curves = withContext(Dispatchers.Default) {
+                buildList {
+                    when (state.mode) {
+                        GraphMode.FUNCTION -> compiled.forEach { (function, f) ->
+                            add(
+                                PlotCurve(
+                                    function.expression,
+                                    f?.let { Plotter(it).sample(state.window) }.orEmpty(),
+                                ),
+                            )
+                        }
+
+                        GraphMode.POLAR -> compiled.forEach { (function, f) ->
+                            add(
+                                PlotCurve(
+                                    function.expression,
+                                    f?.let { Plotter(it).samplePolar() }.orEmpty(),
+                                ),
+                            )
+                        }
+
+                        // Two rows are read as one curve: the first is x(t), the
+                        // second y(t). One row alone cannot describe a path.
+                        GraphMode.PARAMETRIC -> {
+                            val xOf = compiled.getOrNull(0)?.second
+                            val yOf = compiled.getOrNull(1)?.second
+                            if (xOf != null && yOf != null) {
+                                add(
+                                    PlotCurve(
+                                        "(${visible[0].expression}, ${visible[1].expression})",
+                                        Plotter(xOf).sampleParametric(yOf, 0.0, 2 * Math.PI),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    derivative?.let {
+                        add(PlotCurve("f′", Plotter(it).sample(state.window)))
+                    }
+                }
+            }
+            val unplottable = curves.isEmpty() || curves.any { it.isEmpty }
             _uiState.value = _uiState.value.copy(
                 curves = curves,
                 computing = false,
-                error = if (unplottable) "Nothing to draw in this window" else null,
+                error = when {
+                    state.mode == GraphMode.PARAMETRIC && curves.isEmpty() ->
+                        "Parametric mode needs two rows: x(t) then y(t)"
+                    unplottable -> "Nothing to draw in this window"
+                    else -> null
+                },
             )
         }
     }

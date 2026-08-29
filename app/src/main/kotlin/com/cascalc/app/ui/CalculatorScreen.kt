@@ -1,6 +1,15 @@
 package com.cascalc.app.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,7 +91,11 @@ fun CalculatorScreen(
             onVoiceInput = onVoiceInput,
         )
 
-        AnimatedVisibility(visible = state.historyVisible) {
+        AnimatedVisibility(
+            visible = state.historyVisible,
+            enter = expandVertically(tween(220)) + fadeIn(tween(220)),
+            exit = shrinkVertically(tween(180)) + fadeOut(tween(120)),
+        ) {
             HistoryPanel(
                 entries = state.history,
                 onRecallInput = onRecallInput,
@@ -93,7 +106,11 @@ fun CalculatorScreen(
             )
         }
 
-        AnimatedVisibility(visible = state.variablesVisible) {
+        AnimatedVisibility(
+            visible = state.variablesVisible,
+            enter = expandVertically(tween(220)) + fadeIn(tween(220)),
+            exit = shrinkVertically(tween(180)) + fadeOut(tween(120)),
+        ) {
             VariablesPanel(
                 variables = state.variables,
                 onInsert = onInsertVariable,
@@ -141,7 +158,11 @@ fun CalculatorScreen(
                     ),
                 )
             }
-            AnimatedVisibility(visible = state.stepsVisible) {
+            AnimatedVisibility(
+                visible = state.stepsVisible,
+                enter = expandVertically(tween(240)) + fadeIn(tween(240)),
+                exit = shrinkVertically(tween(180)) + fadeOut(tween(120)),
+            ) {
                 StepsPanel(steps = state.steps, modifier = Modifier.heightIn(max = 260.dp))
             }
         }
@@ -265,10 +286,20 @@ private fun ResultLine(state: CalculatorUiState, error: String?) {
             )
 
             committed != null -> {
-                Text(
-                    text = committed.exact,
-                    style = MaterialTheme.typography.headlineMedium,
-                )
+                // A new answer rises into place; the old one leaves upward, so
+                // the change reads as a replacement rather than a flicker.
+                AnimatedContent(
+                    targetState = committed.exact,
+                    transitionSpec = {
+                        (slideInVertically(tween(220)) { it / 3 } + fadeIn(tween(220)))
+                            .togetherWith(
+                                slideOutVertically(tween(160)) { -it / 3 } + fadeOut(tween(120)),
+                            )
+                    },
+                    label = "result",
+                ) { value ->
+                    Text(text = value, style = MaterialTheme.typography.headlineMedium)
+                }
                 committed.approximate?.let { approximate ->
                     Text(
                         text = "${stringResource(R.string.approx_prefix)} $approximate",
@@ -286,10 +317,15 @@ private fun ResultLine(state: CalculatorUiState, error: String?) {
             }
 
             preview != null -> {
-                Text(
-                    text = preview,
-                    style = MaterialTheme.typography.headlineMedium,
-                )
+                AnimatedContent(
+                    targetState = preview,
+                    transitionSpec = {
+                        fadeIn(tween(140)) togetherWith fadeOut(tween(90))
+                    },
+                    label = "preview",
+                ) { value ->
+                    Text(text = value, style = MaterialTheme.typography.headlineMedium)
+                }
                 approximation?.let { approximate ->
                     Text(
                         text = "${stringResource(R.string.approx_prefix)} $approximate",

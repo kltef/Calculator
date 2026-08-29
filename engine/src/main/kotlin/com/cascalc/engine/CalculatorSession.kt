@@ -110,6 +110,41 @@ class CalculatorSession(
         engine.numericFunction(expression, variable, angleMode)
     }
 
+    /** The tangent to [expression] at [x], with the variable inferred. */
+    suspend fun tangentAt(
+        expression: String,
+        x: Double,
+        angleMode: AngleMode,
+    ): TangentLine? = withContext(dispatcher) {
+        val engine = engineOrNull() ?: return@withContext null
+        val variable = engine.plotVariable(expression, angleMode) ?: DEFAULT_PLOT_VARIABLE
+        engine.tangentAt(expression, variable, x, angleMode)
+    }
+
+    /** The exact definite integral of [expression] over the given bounds. */
+    suspend fun definiteIntegral(
+        expression: String,
+        from: Double,
+        to: Double,
+        angleMode: AngleMode,
+    ): String? = withContext(dispatcher) {
+        val engine = engineOrNull() ?: return@withContext null
+        val variable = engine.plotVariable(expression, angleMode) ?: DEFAULT_PLOT_VARIABLE
+        engine.definiteIntegral(expression, variable, from, to, angleMode)
+    }
+
+    /** A numeric function for f′, so the derivative can be plotted. */
+    suspend fun derivativeFunction(
+        expression: String,
+        angleMode: AngleMode,
+    ): ((Double) -> Double)? = withContext(dispatcher) {
+        val engine = engineOrNull() ?: return@withContext null
+        val variable = engine.plotVariable(expression, angleMode) ?: DEFAULT_PLOT_VARIABLE
+        val derivative = engine.evaluate(expression, angleMode, Action.DIFFERENTIATE)
+        val body = (derivative as? CalcResult.Success)?.raw ?: return@withContext null
+        engine.numericFunction(body, variable, angleMode)
+    }
+
     /**
      * Builds the engine ahead of first use, so the wait happens while the user
      * is still looking at an empty calculator rather than after their first tap.

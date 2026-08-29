@@ -373,6 +373,94 @@ class CasEngine(
         }
     }
 
+    /**
+     * The tangent to [input] at [at].
+     *
+     * The slope comes from the *symbolic* derivative evaluated at the point,
+     * not a finite difference, so it is exact where Symja can differentiate.
+     * Finite differences are only used as a fallback, and they are the reason
+     * naive tangent tools drift near sharp turns.
+     */
+    fun tangentAt(
+        input: String,
+        variable: String,
+        at: Double,
+        angleMode: AngleMode = AngleMode.RADIANS,
+    ): TangentLine? {
+        val f = numericFunction(input, variable, angleMode) ?: return null
+        val y = f(at)
+        if (!y.isFinite()) return null
+
+        val normalized = try {
+            InputNormalizer.normalize(input, angleMode)
+        } catch (e: RuntimeException) {
+            return null
+        }
+        val slope = symbolicSlope(normalized, variable, at, angleMode)
+            ?: centralDifference(f, at)
+            ?: return null
+        if (!slope.isFinite()) return null
+
+        return TangentLine(slope = slope, intercept = y - slope * at, at = PlotPoint(at, y))
+    }
+
+    private fun symbolicSlope(
+        normalized: String,
+        variable: String,
+        at: Double,
+        angleMode: AngleMode,
+    ): Double? = try {
+        val derivative = evalRaw("D(${substituted(normalized, setOf(variable))}, $variable)")
+        numericFunction(derivative.toString(), variable, angleMode)?.invoke(at)?.takeIf { it.isFinite() }
+    } catch (e: RuntimeException) {
+        null
+    } catch (e: SyntaxError) {
+        null
+    }
+
+    private fun centralDifference(f: (Double) -> Double, at: Double): Double? {
+        val h = DIFFERENCE_STEP * maxOf(1.0, kotlin.math.abs(at))
+        val slope = (f(at + h) - f(at - h)) / (2 * h)
+        return slope.takeIf { it.isFinite() }
+    }
+
+    /** The exact definite integral, when Symja can find one. */
+    fun definiteIntegral(
+        input: String,
+        variable: String,
+        from: Double,
+        to: Double,
+        angleMode: AngleMode = AngleMode.RADIANS,
+    ): String? = try {
+        val normalized = InputNormalizer.normalize(input, angleMode)
+        val result = evalRaw(
+            "Integrate(${substituted(normalized, setOf(variable))}, " +
+                "{$variable, ${exactLiteral(from)}, ${exactLiteral(to)}})",
+        )
+        // An unevaluated Integrate means Symja could not find a closed form;
+        // the caller falls back to the numeric area.
+        if (result.toString().startsWith("Integrate(")) null
+        else ResultFormatter.formatExact(result)
+    } catch (e: RuntimeException) {
+        null
+    } catch (e: SyntaxError) {
+        null
+    }
+
+    /**
+     * A bound written so Symja keeps working exactly.
+     *
+     * Passing `3.0` makes the whole integral floating point and turns an exact
+     * `9` into `9.0`, which defeats the point of an exact engine. Whole numbers
+     * are emitted as integers and everything else is rationalised.
+     */
+    private fun exactLiteral(value: Double): String = when {
+        !value.isFinite() -> value.toString()
+        value == kotlin.math.floor(value) && kotlin.math.abs(value) < MAX_EXACT_LITERAL ->
+            value.toLong().toString()
+        else -> "Rationalize($value)"
+    }
+
     /** The free variable a plot should be drawn against, if there is one. */
     fun plotVariable(input: String, angleMode: AngleMode = AngleMode.RADIANS): String? {
         val normalized = try {
@@ -451,5 +539,11 @@ class CasEngine(
          * arithmetic onto the arbitrary-precision backend for no benefit.
          */
         private const val OUTPUT_PRECISION: Short = 30
+
+        /** Relative step for the finite-difference fallback. */
+        private const val DIFFERENCE_STEP = 1e-6
+
+        /** Beyond this a double no longer represents integers exactly. */
+        private const val MAX_EXACT_LITERAL = 9.007199254740992E15
     }
 }

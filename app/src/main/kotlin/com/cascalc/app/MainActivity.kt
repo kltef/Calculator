@@ -23,6 +23,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import com.cascalc.app.ui.ArScreen
 import com.cascalc.app.ui.BottomBar
 import com.cascalc.app.ui.CalculatorScreen
 import com.cascalc.app.ui.CasCalculatorTheme
@@ -54,7 +60,17 @@ class MainActivity : ComponentActivity() {
                 ) { padding ->
                     Column(modifier = Modifier.padding(padding)) {
                         CrashBannerIfAny(app)
-                        when (screen) {
+                        AnimatedContent(
+                            targetState = screen,
+                            transitionSpec = {
+                                // A plain cross-fade: screens here are peers, so
+                                // a directional slide would imply a hierarchy
+                                // that does not exist.
+                                fadeIn(tween(180)) togetherWith fadeOut(tween(120))
+                            },
+                            label = "screen",
+                        ) { current ->
+                        when (current) {
                             Screen.CALCULATOR -> CalculatorRoute(
                                 onGoToGraph = { screen = Screen.GRAPH },
                             )
@@ -63,6 +79,7 @@ class MainActivity : ComponentActivity() {
                             Screen.TOOLS -> ToolsRoute()
                             Screen.PRACTICE -> PracticeRoute()
                             Screen.REFERENCE -> ReferenceScreen()
+                            Screen.AR -> ArRoute()
                             Screen.SETTINGS -> SettingsScreen(
                                 appearance = appearance,
                                 onChange = {
@@ -70,6 +87,7 @@ class MainActivity : ComponentActivity() {
                                     app.settings.save(it)
                                 },
                             )
+                        }
                         }
                     }
                 }
@@ -180,6 +198,24 @@ private fun GraphRoute() {
         onFindRoots = viewModel::findRoots,
         onFindIntersections = viewModel::findIntersections,
         onResetWindow = viewModel::resetWindow,
+        onSetMode = viewModel::setMode,
+        onToggleDerivative = viewModel::toggleDerivative,
+        onShadeArea = viewModel::shadeArea,
+        onTangentAt = viewModel::showTangentAt,
+        onClearOverlays = viewModel::clearOverlays,
+    )
+}
+
+@Composable
+private fun ArRoute() {
+    val viewModel: ArViewModel = viewModel()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    ArScreen(
+        state = state,
+        onFrame = viewModel::onFrame,
+        onTapEquation = viewModel::expand,
+        onToggleScanning = viewModel::toggleScanning,
+        onReset = viewModel::reset,
     )
 }
 

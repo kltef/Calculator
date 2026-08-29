@@ -2,8 +2,8 @@
 
 Native Android (Kotlin), math engine powered by [Symja](https://github.com/axkr/symja_android_library).
 
-**Status: V1–V6 shipped. V7 partly shipped. V8 not started.** See the
-per-version notes; what is *not* built is stated plainly rather than implied.
+**Status: V1–V6 and V8 shipped. V7 partly shipped.** See the per-version
+notes; what is *not* built is stated plainly rather than implied.
 
 ---
 
@@ -58,6 +58,8 @@ methods to `StepSolver`, not changing the solver.
 - [x] Multiple functions on one graph (up to four)
 - [x] Trace mode (tap curve for coordinates)
 - [x] Visual root/intersection finding, feeding back into V2's solver
+- [x] Polar `r(θ)` and parametric `(x(t), y(t))` modes
+- [x] Derivative plotted alongside the function
 
 `Plotter` samples in graph coordinates and the canvas only maps to pixels, so
 zooming re-samples rather than stretching an image. Two details that matter:
@@ -66,12 +68,12 @@ and root finding **excludes** those poles, because a sign change at an
 asymptote is not a root. Roots come from sign changes refined by bisection;
 intersections are the roots of a difference.
 
-## V4 — Calculus ✅ (mostly)
+## V4 — Calculus ✅
 
 - [x] Numeric + symbolic derivatives
 - [x] Definite/indefinite integrals
 - [x] Limits
-- [ ] Tangent lines and area-under-curve shading on V3's graphs — **not built**
+- [x] Tangent lines and area-under-curve shading on V3's graphs
 
 Derivatives, integrals and limits are actions with the variable inferred, plus
 typed `d`/`integrate`/`limit` syntax for higher derivatives, definite bounds and
@@ -79,9 +81,12 @@ limits at a stated point. `StepSolver` shows a power-rule derivation for
 polynomial derivatives; product/quotient/chain rules report no steps rather
 than inventing a method.
 
-The graph overlays are the gap: they need the graph screen to accept an
-expression *and* a marked point from the calculus screen, which is a
-cross-screen state change rather than new maths.
+Tangent slope comes from the **symbolic** derivative evaluated at the point, not
+a finite difference — finite differences are why naive tangent tools drift near
+sharp turns; a central difference is only the fallback. Area shading reports the
+exact integral where Symja finds a closed form and the numeric (Simpson) area
+otherwise. Integral bounds are written as exact literals, because passing `3.0`
+turns an exact `9` into `9.0` and defeats the point of an exact engine.
 
 ## V5 — Matrices & Linear Algebra ✅
 
@@ -119,6 +124,10 @@ this build. Temperature is affine (offset, not ratio) — 0 °C is 32 °F, not 0
 
 Built:
 
+- [x] Smooth animations throughout — cross-fade between screens, results that
+      rise into place, panels that expand rather than appear, and curves that
+      sweep in when the plotted set changes (but not while panning, where
+      re-animating would read as stutter)
 - [x] Widgets — home-screen widget showing the last result
 - [x] Custom themes (system/light/dark, dynamic colour), adjustable UI density
 - [x] Export: step-by-step solutions as PDF, results as text
@@ -129,10 +138,8 @@ Built:
 
 Not built, with reasons:
 
-- [ ] **Camera/OCR input** — needs ML Kit or an equivalent, which is a large
-      dependency that cannot be exercised in this environment (no camera, no
-      emulator). Shipping it untested into a working app is how the startup
-      crash happened.
+- [x] **Camera/OCR input** — shipped as part of V8's AR mode (ML Kit
+      Play-services text recognition, interval-throttled).
 - [ ] **Cloud sync/backup** — needs a backend, an account system and a privacy
       decision. There is nothing to write until those exist.
 - [ ] **Collaboration** (shared workspaces, public links) — same; a backend
@@ -146,25 +153,41 @@ Not built, with reasons:
       `StepSolver` generates.
 - [ ] **Monetization structure** — a business decision, not an implementation.
 
-## V8 — AR Overlay — not started
+## V8 — AR Overlay ✅ (screen-space, not world-anchored)
 
-- [ ] Live camera feed with continuous (interval-based, not per-frame) OCR
-- [ ] Equation detection + tracking via ARCore anchors
-- [ ] Solution overlay rendered in space
-- [ ] Graphs anchored in space at real scale
-- [ ] Tap-to-expand step-by-step as page annotations
+- [x] Live camera feed with **interval-based** OCR (400 ms, not per-frame)
+- [x] Equation detection + tracking, with overlays locked to the writing
+- [x] Solution overlay rendered beside the written equation
+- [x] Tap-to-expand step-by-step as page annotations
+- [x] Symja remains the sole math engine — AR adds input and rendering only
+- [ ] Graphs anchored in space at real scale — not built
+- [ ] ARCore world anchors — **deliberately not used**, see below
 
-**Why nothing was written.** This roadmap already answers it: *"prototype
-standalone before full integration"*, with tracking stability named as the
-biggest risk. That prototype needs an ARCore-capable phone in hand, under real
-lighting, with real handwriting. None of that can be approximated here — there
-is no camera, no emulator and no ARCore. Writing an AR module blind would
-produce code that compiles and cannot be trusted, which is exactly the failure
-mode that produced the startup crash earlier in this project.
+**Tracking, the risk this roadmap names.** `EquationTracker` is plain Kotlin in
+the engine module with no Android types, so the hard part is unit-tested rather
+than eyeballed through a viewfinder. Three things keep an overlay steady:
+matching detections by **position** (text only breaks ties), **easing** the drawn
+box toward each new reading instead of snapping, and **grace frames** so a
+momentary OCR failure from shadow or blur does not make the answer flicker away.
 
-The prerequisite is V7's OCR: AR is a rendering layer over the same recognition
-and the same solver. Build and validate camera OCR on a device first, then
-anchor it.
+One bug the tests caught: the text-match bonus initially exceeded the overlap
+threshold on its own, so identical writing anywhere on the page could capture a
+track and the overlay would jump across the page. Position now gates matching
+outright.
+
+**Why screen-space rather than ARCore anchors.** ARCore must own the camera and
+render the feed through OpenGL, which rules out a CameraX preview and ML Kit
+analysis on the same stream. Choosing ARCore would mean rewriting recognition
+and rendering around a GL pipeline that cannot be exercised here at all. The
+screen-space overlay is what shipping AR translation apps do, and it is the
+honest deliverable: it works on any camera phone, and its stability logic is
+tested. World anchoring — and graphs pinned in space at real scale — remains the
+upgrade path, and needs a device in hand.
+
+OCR is ML Kit's Play-services text recognition, which fetches its model on
+demand rather than bundling ~16 MB. Lines that do not look like maths are
+rejected outright: an overlay that confidently answers a shopping list is worse
+than one that stays quiet.
 
 ---
 

@@ -87,5 +87,20 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 
+    // V8 AR: camera capture and on-device text recognition. ML Kit here is the
+    // Play-services variant, which fetches its model on demand rather than
+    // bundling ~16 MB of it into the APK.
+    //
+    // ARCore is deliberately NOT a dependency - see ArScreen and ROADMAP.md.
+    // World anchoring needs ARCore to own the camera and render the feed
+    // through OpenGL, which rules out CameraX preview and ML Kit analysis on
+    // the same stream. Tracking here is screen-space with motion smoothing.
+    implementation(libs.camera.core)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+    implementation(libs.camera.mlkit.vision)
+    implementation(libs.mlkit.text.recognition)
+
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 }

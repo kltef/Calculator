@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -22,10 +24,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.cascalc.app.GraphMode
 import com.cascalc.app.GraphUiState
 
 /**
@@ -47,8 +60,26 @@ fun GraphScreen(
     onFindRoots: () -> Unit,
     onFindIntersections: () -> Unit,
     onResetWindow: () -> Unit,
+    onSetMode: (GraphMode) -> Unit,
+    onToggleDerivative: () -> Unit,
+    onShadeArea: () -> Unit,
+    onTangentAt: (Double) -> Unit,
+    onClearOverlays: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Curves sweep in when the set of plotted expressions changes, but not on
+    // every pan — re-animating during a drag would look like stutter.
+    val signature = state.curves.joinToString { it.expression } + state.mode
+    var reveal by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(signature) {
+        reveal = 0f
+        reveal = 1f
+    }
+    val animatedReveal by animateFloatAsState(
+        targetValue = reveal,
+        animationSpec = tween(durationMillis = 520),
+        label = "curveReveal",
+    )
     Column(modifier = modifier.fillMaxSize().padding(horizontal = 12.dp)) {
 
         state.functions.forEachIndexed { index, function ->
@@ -87,6 +118,17 @@ fun GraphScreen(
             }
         }
 
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(GraphMode.entries.size) { index ->
+                val mode = GraphMode.entries[index]
+                FilterChip(
+                    selected = state.mode == mode,
+                    onClick = { onSetMode(mode) },
+                    label = { Text(mode.label) },
+                )
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -106,12 +148,38 @@ fun GraphScreen(
             AssistChip(onClick = onResetWindow, label = { Text("Reset") })
         }
 
-        if (state.computing) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item {
+                FilterChip(
+                    selected = state.showDerivative,
+                    onClick = onToggleDerivative,
+                    label = { Text("f′") },
+                )
+            }
+            item { AssistChip(onClick = onShadeArea, label = { Text("Area") }) }
+            item {
+                AssistChip(
+                    onClick = { onTangentAt(state.window.xMin + state.window.width / 2) },
+                    label = { Text("Tangent") },
+                )
+            }
+            item { AssistChip(onClick = onClearOverlays, label = { Text("Clear") }) }
+        }
+
+        AnimatedVisibility(
+            visible = state.computing,
+            enter = fadeIn(tween(120)),
+            exit = fadeOut(tween(240)),
+        ) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
-        state.error?.let { error ->
+        AnimatedVisibility(
+            visible = state.error != null,
+            enter = fadeIn(tween(160)),
+            exit = fadeOut(tween(160)),
+        ) {
             Text(
-                text = error,
+                text = state.error.orEmpty(),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 2.dp),
@@ -123,6 +191,9 @@ fun GraphScreen(
             curves = state.curves,
             markers = state.markers,
             traceEnabled = state.traceEnabled,
+            tangent = state.tangent,
+            area = state.area,
+            reveal = animatedReveal,
             onTransform = onTransform,
             onTrace = onTrace,
             modifier = Modifier
@@ -131,9 +202,17 @@ fun GraphScreen(
                 .padding(vertical = 8.dp),
         )
 
-        if (state.markers.isNotEmpty()) {
+        val caption = listOfNotNull(
+            state.areaLabel,
+            state.markers.takeIf { it.isNotEmpty() }?.joinToString("   ") { it.label },
+        ).joinToString("   ")
+        AnimatedVisibility(
+            visible = caption.isNotBlank(),
+            enter = fadeIn(tween(180)),
+            exit = fadeOut(tween(180)),
+        ) {
             Text(
-                text = state.markers.joinToString("   ") { it.label },
+                text = caption,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(bottom = 8.dp),
             )

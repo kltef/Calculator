@@ -17,6 +17,14 @@ data class PlotCurve(
     val isEmpty: Boolean get() = segments.all { it.size < 2 }
 }
 
+/** A shaded region under a curve, with its signed area. */
+data class AreaUnderCurve(val points: List<PlotPoint>, val area: Double)
+
+/** A straight line in the form y = slope·x + intercept. */
+data class TangentLine(val slope: Double, val intercept: Double, val at: PlotPoint) {
+    fun valueAt(x: Double): Double = slope * x + intercept
+}
+
 /** The visible window, in graph coordinates. */
 data class PlotWindow(
     val xMin: Double,
@@ -153,8 +161,107 @@ class Plotter(private val evaluate: (Double) -> Double) {
         return if (y.isFinite()) y else null
     }
 
+    /**
+     * Samples a parametric pair (x(t), y(t)) over t.
+     *
+     * Unlike [sample] this can revisit the same x, so it is not a function of x
+     * and cannot be split on x-monotonicity; breaks come only from undefined
+     * points.
+     */
+    fun sampleParametric(
+        yOf: (Double) -> Double,
+        tMin: Double,
+        tMax: Double,
+        samples: Int = DEFAULT_SAMPLES,
+    ): List<List<PlotPoint>> {
+        if (samples < 2 || tMax <= tMin) return emptyList()
+        val step = (tMax - tMin) / (samples - 1)
+        val segments = mutableListOf<List<PlotPoint>>()
+        var current = mutableListOf<PlotPoint>()
+
+        for (i in 0 until samples) {
+            val t = tMin + i * step
+            val x = safeEvaluate(t)
+            val y = try {
+                yOf(t).takeIf { it.isFinite() }
+            } catch (e: RuntimeException) {
+                null
+            }
+            if (x == null || y == null) {
+                if (current.size >= 2) segments += current
+                current = mutableListOf()
+                continue
+            }
+            current += PlotPoint(x, y)
+        }
+        if (current.size >= 2) segments += current
+        return segments
+    }
+
+    /**
+     * Samples a polar curve r(θ), converting to Cartesian.
+     *
+     * Negative r is kept rather than clamped: r = cos(2θ) draws its full rose
+     * only if negative radii are plotted opposite their angle, which is what
+     * the conversion does naturally.
+     */
+    fun samplePolar(
+        thetaMin: Double = 0.0,
+        thetaMax: Double = 2 * Math.PI,
+        samples: Int = DEFAULT_SAMPLES,
+    ): List<List<PlotPoint>> {
+        if (samples < 2 || thetaMax <= thetaMin) return emptyList()
+        val step = (thetaMax - thetaMin) / (samples - 1)
+        val segments = mutableListOf<List<PlotPoint>>()
+        var current = mutableListOf<PlotPoint>()
+
+        for (i in 0 until samples) {
+            val theta = thetaMin + i * step
+            val r = safeEvaluate(theta)
+            if (r == null) {
+                if (current.size >= 2) segments += current
+                current = mutableListOf()
+                continue
+            }
+            current += PlotPoint(r * kotlin.math.cos(theta), r * kotlin.math.sin(theta))
+        }
+        if (current.size >= 2) segments += current
+        return segments
+    }
+
+    /**
+     * The region between the curve and the x-axis over [from]..[to], as a
+     * closed polygon ready to fill, plus its signed area.
+     *
+     * Area is by Simpson's rule, which is exact for anything up to a cubic and
+     * close enough for drawing elsewhere. It is *signed*: area below the axis
+     * counts negative, matching what the definite integral means.
+     */
+    fun areaUnder(from: Double, to: Double, samples: Int = AREA_SAMPLES): AreaUnderCurve? {
+        if (to <= from || samples < 2) return null
+        // Simpson's rule needs an even number of intervals.
+        val intervals = if (samples % 2 == 0) samples else samples + 1
+        val step = (to - from) / intervals
+
+        val points = mutableListOf<PlotPoint>()
+        var total = 0.0
+        for (i in 0..intervals) {
+            val x = from + i * step
+            val y = safeEvaluate(x) ?: return null
+            points += PlotPoint(x, y)
+            val weight = when {
+                i == 0 || i == intervals -> 1.0
+                i % 2 == 1 -> 4.0
+                else -> 2.0
+            }
+            total += weight * y
+        }
+        return AreaUnderCurve(points, total * step / 3.0)
+    }
+
     companion object {
         const val DEFAULT_SAMPLES = 480
+        private const val AREA_SAMPLES = 200
         private const val BISECTION_STEPS = 60
         private const val TOLERANCE = 1e-9
 
