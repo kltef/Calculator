@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CAS Calculator</string>
+    <string name="expression_hint">Enter an expression</string>
+    <string name="history_title">History</string>
+    <string name="history_empty">Calculations you make will appear here.</string>
+    <string name="clear_history">Clear history</string>
+    <string name="delete_entry">Delete entry</string>
+    <string name="show_history">Show history</string>
+    <string name="hide_history">Hide history</string>
+    <string name="backspace">Backspace</string>
+    <string name="clear">Clear</string>
+    <string name="equals">Equals</string>
+    <string name="angle_mode">Angle mode</string>
+    <string name="approx_prefix">≈</string>
+</resources>
