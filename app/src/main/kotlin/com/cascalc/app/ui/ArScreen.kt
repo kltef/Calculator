@@ -13,6 +13,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,12 +26,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,7 +55,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
@@ -117,25 +136,26 @@ fun ArScreen(
             onHandStatus = onHandStatus,
             modifier = Modifier.fillMaxSize(),
         )
-        EquationOverlay(state = state, onTapEquation = onTapEquation)
-        PointerOverlay(state.pointer)
+
+        // Everything the camera has found, drawn in one pass: the frames round
+        // each equation, and the pointing cursor on top of them.
+        DetectionCanvas(state = state)
+        AnswerChips(state = state, onTapEquation = onTapEquation)
 
         state.handTrackingStatus?.let { status ->
-            // Sits above the controls rather than at the top, where the
-            // expanded explanation card would cover it.
-            Text(
-                text = status,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface,
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(start = 12.dp, end = 12.dp, bottom = 76.dp)
-                    .background(
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                        RoundedCornerShape(6.dp),
-                    )
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
+                    .padding(start = 12.dp, end = 12.dp, bottom = 76.dp),
+            ) {
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+            }
         }
 
         Row(
@@ -151,43 +171,98 @@ fun ArScreen(
         }
 
         AnimatedVisibility(
-            visible = state.expandedId != null &&
-                (state.steps.isNotEmpty() || state.explanation != null),
-            enter = fadeIn(tween(200)),
-            exit = fadeOut(tween(200)),
-            modifier = Modifier.align(Alignment.TopCenter),
+            visible = state.expandedId != null && state.explanation != null,
+            enter = slideInVertically(tween(240)) { it } + fadeIn(tween(240)),
+            exit = slideOutVertically(tween(180)) { it } + fadeOut(tween(140)),
+            modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                ),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .padding(12.dp)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    state.explanation?.let { explanation ->
-                        Text(explanation.headline, style = MaterialTheme.typography.titleMedium)
-                        explanation.facts.forEach { fact ->
-                            Text(
-                                "• $fact",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    state.steps.forEachIndexed { index, step ->
+            state.explanation?.let { explanation ->
+                ExplanationSheet(
+                    equation = state.equations.firstOrNull { it.id == state.expandedId }?.text,
+                    explanation = explanation,
+                    onClose = { state.expandedId?.let(onTapEquation) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * A reading-order sheet: the equation, what kind of thing it is, how it is
+ * said aloud, then each section.
+ *
+ * Anchored to the bottom rather than the top so it never covers the writing it
+ * is describing, and opaque rather than tinted, because small text over a
+ * moving camera feed is unreadable.
+ */
+@Composable
+private fun ExplanationSheet(
+    equation: String?,
+    explanation: com.cascalc.engine.Explainer.Explanation,
+    onClose: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+        shadowElevation = 12.dp,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .heightIn(max = 340.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 20.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    equation?.let {
                         Text(
-                            "${index + 1}. ${step.explanation}",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = it,
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                            ),
                         )
-                        step.expression?.let {
-                            Text(it, style = MaterialTheme.typography.titleSmall)
-                        }
+                    }
+                    Text(
+                        text = explanation.headline,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close explanation")
+                }
+            }
+
+            explanation.reading?.let { reading ->
+                Text(
+                    text = "\u201C$reading\u201D",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, end = 12.dp),
+                )
+            }
+
+            explanation.sections.forEach { section ->
+                Spacer(Modifier.height(14.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = section.title.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(6.dp))
+                section.lines.forEach { line ->
+                    Row(modifier = Modifier.padding(bottom = 6.dp, end = 12.dp)) {
+                        Text(
+                            text = "\u2022",
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.width(16.dp),
+                        )
+                        Text(text = line, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -217,29 +292,49 @@ private fun CameraPermissionPrompt(onRequest: () -> Unit, modifier: Modifier = M
 }
 
 /**
- * The pointing cursor and its dwell ring.
+ * One drawing pass over the camera: a frame round every equation the app has
+ * recognised, and the pointing cursor above them.
  *
- * The ring filling is the whole contract with the user: nothing opens without
- * it, so a selection is never a surprise, and holding still is visibly what
- * causes it.
+ * Drawing the frames matters as much as the answers — without them there is no
+ * way to tell whether the app has seen your writing at all, or is simply
+ * showing nothing because it found nothing.
  */
 @Composable
-private fun PointerOverlay(pointer: PointerState) {
-    val pointing = pointer as? PointerState.Pointing ?: return
-    val color = MaterialTheme.colorScheme.tertiary
-    val onTarget = pointing.targetId != null
+private fun DetectionCanvas(state: ArUiState) {
+    val found = MaterialTheme.colorScheme.primary
+    val aimed = MaterialTheme.colorScheme.tertiary
+    val pointing = state.pointer as? PointerState.Pointing
 
     Canvas(modifier = Modifier.fillMaxSize()) {
+        state.equations.forEach { equation ->
+            val targeted = pointing?.targetId == equation.id
+            val color = if (targeted) aimed else found
+            val box = equation.box
+            drawRoundRect(
+                color = color.copy(alpha = if (targeted) 0.95f else 0.55f),
+                topLeft = Offset(box.left - 6f, box.top - 6f),
+                size = Size(box.width + 12f, box.height + 12f),
+                cornerRadius = CornerRadius(10f, 10f),
+                style = Stroke(width = if (targeted) 4f else 2f),
+            )
+        }
+
+        pointing ?: return@Canvas
         val center = Offset(pointing.position.x, pointing.position.y)
-        drawCircle(color, radius = if (onTarget) 14f else 9f, center = center, alpha = 0.9f)
+        val onTarget = pointing.targetId != null
+
+        // Soft halo, so the cursor stays visible against light and dark pages.
+        drawCircle(aimed.copy(alpha = 0.25f), radius = if (onTarget) 26f else 18f, center = center)
+        drawCircle(aimed, radius = if (onTarget) 10f else 7f, center = center)
+
         if (onTarget && pointing.dwellProgress > 0f) {
             drawArc(
-                color = color,
+                color = aimed,
                 startAngle = -90f,
                 sweepAngle = 360f * pointing.dwellProgress,
                 useCenter = false,
                 topLeft = Offset(center.x - DWELL_RADIUS, center.y - DWELL_RADIUS),
-                size = androidx.compose.ui.geometry.Size(DWELL_RADIUS * 2, DWELL_RADIUS * 2),
+                size = Size(DWELL_RADIUS * 2, DWELL_RADIUS * 2),
                 style = Stroke(width = 5f),
             )
         }
@@ -379,52 +474,58 @@ private fun mapToView(hand: HandLandmarks, transform: android.graphics.Matrix?):
     )
 }
 
-/** Draws an answer beside each tracked equation, easing as the camera moves. */
+/**
+ * The answer beside each equation, as a pill anchored to its right edge.
+ *
+ * The tracker already smooths position; animating on top of that keeps the pill
+ * from stepping between recognition intervals, which is the difference between
+ * a label that sits on the page and one that twitches beside it.
+ */
 @Composable
-private fun EquationOverlay(state: ArUiState, onTapEquation: (Long) -> Unit) {
+private fun AnswerChips(state: ArUiState, onTapEquation: (Long) -> Unit) {
     val density = LocalDensity.current
+    val pointing = state.pointer as? PointerState.Pointing
 
     state.equations.forEach { equation ->
         val solution = equation.solution ?: return@forEach
+        val targeted = pointing?.targetId == equation.id
 
-        // The tracker already smooths position; animating on top of it keeps
-        // the label from stepping between recognition intervals.
-        val x by animateFloatAsState(equation.box.right, tween(180), label = "x")
-        val y by animateFloatAsState(equation.box.top, tween(180), label = "y")
+        val x by animateFloatAsState(equation.box.right, tween(180), label = "chipX")
+        val y by animateFloatAsState(equation.box.top, tween(180), label = "chipY")
 
-        Box(
-            modifier = Modifier
-                .padding(
-                    start = with(density) { x.toDp() } + 8.dp,
-                    top = with(density) { y.toDp() },
-                ),
+        Surface(
+            color = if (targeted) {
+                MaterialTheme.colorScheme.tertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.primaryContainer
+            },
+            contentColor = if (targeted) {
+                MaterialTheme.colorScheme.onTertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            },
+            shape = RoundedCornerShape(14.dp),
+            shadowElevation = 6.dp,
+            modifier = Modifier.padding(
+                start = with(density) { x.toDp() } + 10.dp,
+                top = with(density) { y.toDp() },
+            ),
         ) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
-                ),
-                shape = RoundedCornerShape(10.dp),
+            Column(
+                modifier = Modifier
+                    .clickable { onTapEquation(equation.id) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
-                Column(
-                    modifier = Modifier
-                        .background(Color.Transparent)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        text = "= $solution",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    TextButton(
-                        onClick = { onTapEquation(equation.id) },
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-                    ) {
-                        Text(
-                            if (state.expandedId == equation.id) "Hide steps" else "Steps",
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                }
+                Text(
+                    text = "= $solution",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = if (state.expandedId == equation.id) "tap to close" else "point or tap",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LocalContentColor.current.copy(alpha = 0.7f),
+                )
             }
         }
     }

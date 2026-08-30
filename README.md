@@ -185,7 +185,7 @@ results that arrive after the input has changed again.
 ./gradlew :engine:test
 ```
 
-224 tests covering input normalization (including degree-mode rewriting and
+237 tests covering input normalization (including degree-mode rewriting and
 implicit multiplication), exact evaluation, error classification, variable
 binding and cycle rejection, simplify/expand/factor, equation solving, the
 generated solution steps, the history model, the session wrapper, plotting

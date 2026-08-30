@@ -202,8 +202,16 @@ Hand tracking is an enhancement, never a requirement: if the model cannot be
 fetched or the device cannot run it, AR mode says so and tapping still works.
 
 **Explaining.** Pointing at something gives more than a number. `Explainer`
-names what the thing is — linear, quadratic, cubic, a fraction, a prime — and
-lists supporting facts, each one computed rather than asserted.
+reads the expression back in words, says what each symbol *does* (`+` adds two
+amounts; `×` is repeated addition — "3 × 4 means four lots of 3"), explains
+which part is worked out first when operators of different strength meet, and
+only then gives the answer and what is worth noticing about it.
+
+That ordering matters: precedence is the commonest reason an answer looks wrong,
+so `1 + 2 × 8 × 9` explains *why* it is 145 rather than 216. The teaching text
+lives in `Glossary` as fixed prose about fixed symbols; every factual claim
+around it — the answer, the roots, the prime factorisation — is computed by the
+engine, so an explanation can never describe an expression it has not evaluated.
 
 OCR is ML Kit's Play-services text recognition, which fetches its model on
 demand rather than bundling ~16 MB. The hand model (7.5 MB) is fetched the same
