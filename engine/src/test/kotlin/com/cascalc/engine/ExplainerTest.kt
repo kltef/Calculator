@@ -38,9 +38,28 @@ class ExplainerTest {
         assertTrue(explanation.facts.any { it.contains("Equals 42") })
     }
 
-    @Test fun `reports prime factors of a composite result`() {
+    @Test fun `reports prime factors readably, not as Symja pairs`() {
         val explanation = explainer.explain("360")!!
-        assertTrue(explanation.facts.any { it.contains("Prime factors") })
+        val fact = explanation.facts.first { it.contains("Prime factors") }
+        // 360 = 2^3 * 3^2 * 5
+        assertEquals("Prime factors: 2³ × 3² × 5", fact)
+        assertTrue("raw pair form leaked", !fact.contains("{"))
+    }
+
+    @Test fun `formats a factorisation with no repeated primes`() {
+        assertEquals(
+            "2 × 71 × 809",
+            explainer.formatFactorisation("{{2,1},{71,1},{809,1}}"),
+        )
+    }
+
+    @Test fun `formats a factorisation with exponents`() {
+        assertEquals("2¹⁰", explainer.formatFactorisation("{{2,10}}"))
+    }
+
+    @Test fun `rejects input that is not a factorisation`() {
+        assertNull(explainer.formatFactorisation("42"))
+        assertNull(explainer.formatFactorisation("{{2}}"))
     }
 
     @Test fun `identifies a prime result`() {

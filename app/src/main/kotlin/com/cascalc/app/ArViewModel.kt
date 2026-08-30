@@ -61,6 +61,9 @@ class ArViewModel(application: Application) : AndroidViewModel(application) {
     /** Ids already sent to the engine, so each equation is solved once. */
     private val solving = mutableSetOf<Long>()
 
+    /** The exact text the open card describes, so a re-read can invalidate it. */
+    private var expandedText: String? = null
+
     fun onFrame(detections: List<DetectedText>) {
         if (!_uiState.value.scanning) return
 
@@ -68,7 +71,22 @@ class ArViewModel(application: Application) : AndroidViewModel(application) {
             EquationTextCleaner.clean(detection.text)?.let { DetectedText(it, detection.box) }
         }
         val tracked = tracker.update(usable)
-        _uiState.value = _uiState.value.copy(equations = tracked)
+
+        // An expanded card belongs to one specific reading of one equation. If
+        // that equation stops being tracked, or is re-read as something else,
+        // the card is describing writing that is no longer there - which is how
+        // an explanation of 114878 ends up pinned over "1+2*8*9".
+        val expanded = _uiState.value.expandedId
+        val stillValid = expanded != null &&
+            tracked.any { it.id == expanded && it.text == expandedText }
+
+        _uiState.value = _uiState.value.copy(
+            equations = tracked,
+            expandedId = if (stillValid) expanded else null,
+            steps = if (stillValid) _uiState.value.steps else emptyList(),
+            explanation = if (stillValid) _uiState.value.explanation else null,
+        )
+        if (!stillValid) expandedText = null
 
         tracked.filter { it.solution == null && it.id !in solving }.forEach(::solve)
     }
@@ -112,6 +130,7 @@ class ArViewModel(application: Application) : AndroidViewModel(application) {
     fun expand(id: Long) {
         val equation = tracker.active.firstOrNull { it.id == id } ?: return
         if (_uiState.value.expandedId == id) {
+            expandedText = null
             _uiState.value = _uiState.value.copy(
                 expandedId = null,
                 steps = emptyList(),
@@ -119,12 +138,15 @@ class ArViewModel(application: Application) : AndroidViewModel(application) {
             )
             return
         }
+        expandedText = equation.text
         viewModelScope.launch {
             val action = if (equation.text.contains('=')) Action.SOLVE else Action.EVALUATE
             val result = session.preview(equation.text, AngleMode.RADIANS, action)
             val explanation = withContext(Dispatchers.Default) {
                 explainer.explain(equation.text)
             }
+            // The equation may have moved on while the engine was working.
+            if (expandedText != equation.text) return@launch
             _uiState.value = _uiState.value.copy(
                 expandedId = id,
                 steps = (result as? CalcResult.Success)?.steps.orEmpty(),
@@ -142,6 +164,7 @@ class ArViewModel(application: Application) : AndroidViewModel(application) {
         tracker.reset()
         pointer.reset()
         solving.clear()
+        expandedText = null
         _uiState.value = ArUiState(handTrackingStatus = _uiState.value.handTrackingStatus)
     }
 }

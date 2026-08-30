@@ -82,3 +82,21 @@
 
 # AutoValue-generated classes backing MediaPipe's options objects.
 -keep class **.AutoValue_* { *; }
+
+# --- Flogger -----------------------------------------------------------------
+#
+# MediaPipe logs through Flogger, and `FluentLogger.forEnclosingClass()` finds
+# its caller by walking the call stack. R8's optimiser inlines methods and so
+# removes the very frames it looks for, and the failure is a bare
+# "no caller found on the stack for: com.google.common.flogger.FluentLogger"
+# thrown while building the hand landmarker.
+#
+# `-dontoptimize` is the reliable fix: it turns off the inlining pass while
+# leaving shrinking on, and shrinking is where the size saving comes from -
+# removing Symja code the app never calls, not rewriting the code it keeps.
+-dontoptimize
+-keep class com.google.common.flogger.** { *; }
+-dontwarn com.google.common.flogger.**
+
+# Stack-walking needs real frames to report.
+-keepattributes SourceFile,LineNumberTable,Signature,InnerClasses,EnclosingMethod

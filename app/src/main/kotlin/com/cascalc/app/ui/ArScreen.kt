@@ -121,13 +121,15 @@ fun ArScreen(
         PointerOverlay(state.pointer)
 
         state.handTrackingStatus?.let { status ->
+            // Sits above the controls rather than at the top, where the
+            // expanded explanation card would cover it.
             Text(
                 text = status,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(12.dp)
+                    .align(Alignment.BottomStart)
+                    .padding(start = 12.dp, end = 12.dp, bottom = 76.dp)
                     .background(
                         MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
                         RoundedCornerShape(6.dp),

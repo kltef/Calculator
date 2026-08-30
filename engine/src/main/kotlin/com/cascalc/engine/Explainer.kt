@@ -102,6 +102,58 @@ class Explainer(private val engine: CasEngine) {
             return "$value is prime"
         }
         val factors = engine.evaluate("FactorInteger($value)")
-        return (factors as? CalcResult.Success)?.let { "Prime factors: ${it.exact}" }
+        val raw = (factors as? CalcResult.Success)?.raw ?: return null
+        return formatFactorisation(raw)?.let { "Prime factors: $it" }
+    }
+
+    /**
+     * Turns Symja's `{{2,1},{71,1},{809,1}}` into `2 × 71 × 809`.
+     *
+     * The pair-of-pairs form is how the library represents base and exponent,
+     * and it is unreadable on a card floating over a page. Exponents of one are
+     * dropped and the rest are shown as superscripts.
+     */
+    fun formatFactorisation(raw: String): String? {
+        if (!raw.startsWith("{{") || !raw.endsWith("}}")) return null
+        val pairs = splitTopLevel(raw.substring(1, raw.length - 1))
+
+        val parts = pairs.map { pair ->
+            if (!pair.startsWith("{") || !pair.endsWith("}")) return null
+            val fields = splitTopLevel(pair.substring(1, pair.length - 1))
+            if (fields.size != 2) return null
+            val base = fields[0].trim()
+            val exponent = fields[1].trim()
+            if (exponent == "1") base else "$base${superscript(exponent)}"
+        }
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(" × ")
+    }
+
+    private fun superscript(number: String): String =
+        number.map { SUPERSCRIPTS[it] ?: it }.joinToString("")
+
+    /** Splits on commas outside any braces. */
+    private fun splitTopLevel(text: String): List<String> {
+        val parts = mutableListOf<String>()
+        var depth = 0
+        var start = 0
+        text.forEachIndexed { index, c ->
+            when (c) {
+                '{' -> depth++
+                '}' -> depth--
+                ',' -> if (depth == 0) {
+                    parts += text.substring(start, index)
+                    start = index + 1
+                }
+            }
+        }
+        parts += text.substring(start)
+        return parts.map { it.trim() }
+    }
+
+    private companion object {
+        val SUPERSCRIPTS = mapOf(
+            '0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴',
+            '5' to '⁵', '6' to '⁶', '7' to '⁷', '8' to '⁸', '9' to '⁹',
+        )
     }
 }
