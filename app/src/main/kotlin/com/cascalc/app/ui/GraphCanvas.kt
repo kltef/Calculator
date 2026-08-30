@@ -51,13 +51,13 @@ fun GraphCanvas(
     curves: List<PlotCurve>,
     markers: List<GraphMarker>,
     traceEnabled: Boolean,
+    onTransform: (panX: Double, panY: Double, zoom: Double, focusX: Double, focusY: Double) -> Unit,
+    onTrace: (Double) -> Unit,
+    modifier: Modifier = Modifier,
     tangent: TangentLine? = null,
     area: AreaUnderCurve? = null,
     /** 0..1; curves are revealed along their length as this animates up. */
     reveal: Float = 1f,
-    onTransform: (panX: Double, panY: Double, zoom: Double, focusX: Double, focusY: Double) -> Unit,
-    onTrace: (Double) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     val textMeasurer = rememberTextMeasurer()
     val axisColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurface

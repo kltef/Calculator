@@ -14,18 +14,33 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        ndk {
+            // MediaPipe ships native code for four ABIs. Every phone that can
+            // run this is arm; including x86 would roughly double the native
+            // payload to serve emulators only.
+            // arm64 only. MediaPipe's 32-bit library is another 7 MB and every
+            // phone new enough to run AR mode is 64-bit.
+            abiFilters += setOf("arm64-v8a")
+        }
+    }
+
+    androidResources {
+        // The hand-landmark model must stay uncompressed: MediaPipe memory-maps
+        // it straight out of the APK, which a deflated asset makes impossible.
+        noCompress += "task"
     }
 
     buildTypes {
         release {
-            // Minification is OFF pending diagnosis of a startup failure inside
-            // Symja's initialisation. Symja drags in kryo, reflectasm, janino,
-            // log4j and choco-solver, none of which have keep rules here, and
-            // R8 is the one difference between the APK and the engine tests
-            // (which pass). Re-enable once the cause is known and the keep
-            // rules cover it; the shrunk build is 8 MB against 25 MB.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // Minification is back on: MediaPipe's native library and model
+            // put the unminified build far over any reasonable download size.
+            // The earlier startup crash is addressed in proguard-rules.pro,
+            // which now keeps Symja's reflective dependency graph and turns
+            // obfuscation off entirely - renaming, not shrinking, is what
+            // breaks name-based reflection.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -101,6 +116,8 @@ dependencies {
     implementation(libs.camera.view)
     implementation(libs.camera.mlkit.vision)
     implementation(libs.mlkit.text.recognition)
+    // Hand landmarks for point-to-select in AR mode.
+    implementation(libs.mediapipe.tasks.vision)
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 }

@@ -213,6 +213,8 @@ private fun ArRoute() {
     ArScreen(
         state = state,
         onFrame = viewModel::onFrame,
+        onHand = viewModel::onHand,
+        onHandStatus = viewModel::setHandTrackingStatus,
         onTapEquation = viewModel::expand,
         onToggleScanning = viewModel::toggleScanning,
         onReset = viewModel::reset,

@@ -149,8 +149,8 @@ Not built, with reasons:
       *disables* Symja's `Compile`, `JavaNew` and filesystem builtins on purpose.
 - [ ] **Graph export as image** — the share plumbing exists (`Sharing.shareImage`)
       but nothing captures the canvas to a bitmap yet.
-- [ ] **"Explain this step"** — needs per-step commentary beyond what
-      `StepSolver` generates.
+- [x] **"Explain this"** — `Explainer` describes what an expression is, not only
+      what it equals. Per-*step* commentary is still open.
 - [ ] **Monetization structure** — a business decision, not an implementation.
 
 ## V8 — AR Overlay ✅ (screen-space, not world-anchored)
@@ -159,6 +159,7 @@ Not built, with reasons:
 - [x] Equation detection + tracking, with overlays locked to the writing
 - [x] Solution overlay rendered beside the written equation
 - [x] Tap-to-expand step-by-step as page annotations
+- [x] **Hand tracking — point at an equation to open it**
 - [x] Symja remains the sole math engine — AR adds input and rendering only
 - [ ] Graphs anchored in space at real scale — not built
 - [ ] ARCore world anchors — **deliberately not used**, see below
@@ -184,8 +185,30 @@ honest deliverable: it works on any camera phone, and its stability logic is
 tested. World anchoring — and graphs pinned in space at real scale — remains the
 upgrade path, and needs a device in hand.
 
+**Pointing.** Hand landmarks come from MediaPipe; the decisions made from them
+live in `HandPointer` in the engine module, tested like everything else.
+Pointing is index-out-with-the-rest-curled; the thumb is ignored because it sits
+at an angle that makes "extended" ambiguous and people point comfortably either
+way. The cursor sits slightly *beyond* the fingertip, along the finger, because
+pointing at something means your finger covers it.
+
+Selection is by **dwell**, not by a pinch or an air-tap: those are unreliable to
+detect and easy to trigger by accident, and there is nothing to tap in mid-air.
+A ring fills while the finger is held still, so nothing ever opens without
+warning. Hands are read every frame while text stays on its interval — a cursor
+that lags the finger feels broken, but handwriting on a page does not move.
+
+Hand tracking is an enhancement, never a requirement: if the model cannot be
+fetched or the device cannot run it, AR mode says so and tapping still works.
+
+**Explaining.** Pointing at something gives more than a number. `Explainer`
+names what the thing is — linear, quadratic, cubic, a fraction, a prime — and
+lists supporting facts, each one computed rather than asserted.
+
 OCR is ML Kit's Play-services text recognition, which fetches its model on
-demand rather than bundling ~16 MB. Lines that do not look like maths are
+demand rather than bundling ~16 MB. The hand model (7.5 MB) is fetched the same
+way, on first use of AR mode. Both then run entirely on-device: no frame,
+landmark or equation leaves the phone. Lines that do not look like maths are
 rejected outright: an overlay that confidently answers a shopping list is worse
 than one that stays quiet.
 

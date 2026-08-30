@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -39,17 +40,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.core.content.ContextCompat
 import com.cascalc.app.ArUiState
+import com.cascalc.app.ar.HandAndTextAnalyzer
+import com.cascalc.app.ar.HandDetector
+import com.cascalc.app.ar.HandModel
 import com.cascalc.app.ar.ThrottledAnalyzer
 import com.cascalc.engine.ar.Box as EquationBox
 import com.cascalc.engine.ar.DetectedText
+import com.cascalc.engine.ar.HandLandmarks
+import com.cascalc.engine.ar.Point2
+import com.cascalc.engine.ar.PointerState
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
@@ -68,6 +79,8 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 fun ArScreen(
     state: ArUiState,
     onFrame: (List<DetectedText>) -> Unit,
+    onHand: (HandLandmarks?) -> Unit,
+    onHandStatus: (String?) -> Unit,
     onTapEquation: (Long) -> Unit,
     onToggleScanning: () -> Unit,
     onReset: () -> Unit,
@@ -97,8 +110,30 @@ fun ArScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        CameraPreview(onFrame = onFrame, modifier = Modifier.fillMaxSize())
+        CameraPreview(
+            onFrame = onFrame,
+            onHand = onHand,
+            onHandStatus = onHandStatus,
+            modifier = Modifier.fillMaxSize(),
+        )
         EquationOverlay(state = state, onTapEquation = onTapEquation)
+        PointerOverlay(state.pointer)
+
+        state.handTrackingStatus?.let { status ->
+            Text(
+                text = status,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp)
+                    .background(
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                        RoundedCornerShape(6.dp),
+                    )
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
 
         Row(
             modifier = Modifier
@@ -113,7 +148,8 @@ fun ArScreen(
         }
 
         AnimatedVisibility(
-            visible = state.expandedId != null && state.steps.isNotEmpty(),
+            visible = state.expandedId != null &&
+                (state.steps.isNotEmpty() || state.explanation != null),
             enter = fadeIn(tween(200)),
             exit = fadeOut(tween(200)),
             modifier = Modifier.align(Alignment.TopCenter),
@@ -131,6 +167,16 @@ fun ArScreen(
                         .padding(12.dp)
                         .verticalScroll(rememberScrollState()),
                 ) {
+                    state.explanation?.let { explanation ->
+                        Text(explanation.headline, style = MaterialTheme.typography.titleMedium)
+                        explanation.facts.forEach { fact ->
+                            Text(
+                                "• $fact",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     state.steps.forEachIndexed { index, step ->
                         Text(
                             "${index + 1}. ${step.explanation}",
@@ -167,13 +213,73 @@ private fun CameraPermissionPrompt(onRequest: () -> Unit, modifier: Modifier = M
     }
 }
 
+/**
+ * The pointing cursor and its dwell ring.
+ *
+ * The ring filling is the whole contract with the user: nothing opens without
+ * it, so a selection is never a surprise, and holding still is visibly what
+ * causes it.
+ */
+@Composable
+private fun PointerOverlay(pointer: PointerState) {
+    val pointing = pointer as? PointerState.Pointing ?: return
+    val color = MaterialTheme.colorScheme.tertiary
+    val onTarget = pointing.targetId != null
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val center = Offset(pointing.position.x, pointing.position.y)
+        drawCircle(color, radius = if (onTarget) 14f else 9f, center = center, alpha = 0.9f)
+        if (onTarget && pointing.dwellProgress > 0f) {
+            drawArc(
+                color = color,
+                startAngle = -90f,
+                sweepAngle = 360f * pointing.dwellProgress,
+                useCenter = false,
+                topLeft = Offset(center.x - DWELL_RADIUS, center.y - DWELL_RADIUS),
+                size = androidx.compose.ui.geometry.Size(DWELL_RADIUS * 2, DWELL_RADIUS * 2),
+                style = Stroke(width = 5f),
+            )
+        }
+    }
+}
+
+private const val DWELL_RADIUS = 28f
+
 @Composable
 private fun CameraPreview(
     onFrame: (List<DetectedText>) -> Unit,
+    onHand: (HandLandmarks?) -> Unit,
+    onHandStatus: (String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    var detector by remember { mutableStateOf<HandDetector?>(null) }
+
+    // Fetch the hand model in the background. AR mode is usable before it
+    // arrives - and if it never arrives - so nothing here blocks the camera.
+    LaunchedEffect(Unit) {
+        onHandStatus("Preparing hand tracking…")
+        val outcome = withContext(Dispatchers.IO) {
+            when (val state = HandModel(context).load()) {
+                is HandModel.State.Ready ->
+                    HandDetector.create(context, state.buffer) to null
+                is HandModel.State.Failed -> null to state.reason
+                else -> null to "Hand tracking unavailable"
+            }
+        }
+        detector = outcome.first
+        onHandStatus(
+            when {
+                outcome.first != null -> null
+                else -> "${outcome.second ?: "Hand tracking unavailable"} — tap instead"
+            },
+        )
+    }
+
+    DisposableEffect(detector) {
+        onDispose { detector?.close() }
+    }
 
     val recognizer = remember {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -208,7 +314,19 @@ private fun CameraPreview(
             onFrame(detections)
         }
 
-        controller.setImageAnalysisAnalyzer(executor, ThrottledAnalyzer(analyzer))
+        val composite = HandAndTextAnalyzer(
+            delegate = ThrottledAnalyzer(analyzer),
+            detectHand = { proxy ->
+                val handDetector = detector ?: return@HandAndTextAnalyzer null
+                val bitmap = runCatching { proxy.toBitmap() }.getOrNull()
+                    ?: return@HandAndTextAnalyzer null
+                handDetector.detect(bitmap, proxy.imageInfo.rotationDegrees)
+            },
+            onHand = { hand, transform ->
+                onHand(hand?.let { mapToView(it, transform) })
+            },
+        )
+        controller.setImageAnalysisAnalyzer(executor, composite)
         controller.bindToLifecycle(lifecycleOwner)
 
         onDispose {
@@ -226,6 +344,26 @@ private fun CameraPreview(
                 scaleType = PreviewView.ScaleType.FILL_CENTER
             }
         },
+    )
+}
+
+/**
+ * Moves landmarks from sensor pixels into view coordinates.
+ *
+ * Equation boxes already arrive view-referenced from CameraX, so the cursor has
+ * to be put in the same space before the two can be compared — otherwise
+ * pointing lands nowhere near what it looks like it is pointing at.
+ */
+private fun mapToView(hand: HandLandmarks, transform: android.graphics.Matrix?): HandLandmarks {
+    val matrix = transform ?: return hand
+    val coordinates = FloatArray(hand.points.size * 2)
+    hand.points.forEachIndexed { index, point ->
+        coordinates[index * 2] = point.x
+        coordinates[index * 2 + 1] = point.y
+    }
+    matrix.mapPoints(coordinates)
+    return HandLandmarks(
+        hand.points.indices.map { Point2(coordinates[it * 2], coordinates[it * 2 + 1]) },
     )
 }
 

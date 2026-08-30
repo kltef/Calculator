@@ -185,14 +185,15 @@ results that arrive after the input has changed again.
 ./gradlew :engine:test
 ```
 
-194 tests covering input normalization (including degree-mode rewriting and
+224 tests covering input normalization (including degree-mode rewriting and
 implicit multiplication), exact evaluation, error classification, variable
 binding and cycle rejection, simplify/expand/factor, equation solving, the
 generated solution steps, the history model, the session wrapper, plotting
 (including pole splitting and root finding), calculus, linear algebra, unit
 conversion, base conversion, the natural-language parser, the practice grader,
 tangents and area, polar and parametric sampling, and the AR equation tracker
-and OCR text cleaner.
+and OCR text cleaner, the hand-pointing gesture and dwell logic, camera frame
+rotation maths, and the explainer.
 
 `AndroidClassAvailabilityTest` deserves a note: it loads the engine through a
 classloader that hides `java.awt`, `javax.imageio`, `java.lang.management`,
