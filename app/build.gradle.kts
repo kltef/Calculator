@@ -19,8 +19,9 @@ android {
             // MediaPipe ships native code for four ABIs. Every phone that can
             // run this is arm; including x86 would roughly double the native
             // payload to serve emulators only.
-            // arm64 only. MediaPipe's 32-bit library is another 7 MB and every
-            // phone new enough to run AR mode is 64-bit.
+            // arm64 only. MediaPipe's 32-bit library costs another ~3 MB, and
+            // a device without arm64 is now reported explicitly in the AR
+            // status line rather than looking like a bug.
             abiFilters += setOf("arm64-v8a")
         }
     }

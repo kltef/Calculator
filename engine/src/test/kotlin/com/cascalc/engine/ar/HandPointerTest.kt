@@ -43,6 +43,28 @@ class HandPointerTest {
         assertEquals(PointerState.Absent, pointer.update(null, emptyList(), 0L))
     }
 
+    @Test fun `a relaxed point with one finger half-out still counts`() {
+        // Landmark noise and ordinary hand posture leave one finger partly
+        // extended; requiring all three curled made the cursor never appear.
+        val pointer = HandPointer()
+        val state = pointer.update(
+            hand(index = true, middle = false, ring = true, pinky = false),
+            emptyList(),
+            0L,
+        )
+        assertTrue(state is PointerState.Pointing)
+    }
+
+    @Test fun `two fingers out is not pointing`() {
+        val pointer = HandPointer()
+        val state = pointer.update(
+            hand(index = true, middle = true, ring = true, pinky = false),
+            emptyList(),
+            0L,
+        )
+        assertEquals(PointerState.Idle, state)
+    }
+
     @Test fun `an open hand is not pointing`() {
         val pointer = HandPointer()
         val state = pointer.update(

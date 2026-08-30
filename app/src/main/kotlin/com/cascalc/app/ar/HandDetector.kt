@@ -59,9 +59,22 @@ class HandDetector private constructor(private val landmarker: HandLandmarker) {
         runCatching { landmarker.close() }
     }
 
+    /** Either a working detector, or why there isn't one. */
+    sealed interface Outcome {
+        data class Ready(val detector: HandDetector) : Outcome
+        data class Failed(val reason: String) : Outcome
+    }
+
     companion object {
-        /** @return null when the model cannot be loaded; tracking is optional. */
-        fun create(context: Context, model: ByteBuffer): HandDetector? = try {
+        /**
+         * Builds a detector, reporting *why* if it cannot.
+         *
+         * The reason is carried out rather than swallowed: a failure here means
+         * something specific — a missing native library, a corrupt model, a
+         * class the shrinker removed — and each has a different fix. Returning
+         * a bare null turns all of them into the same useless "unavailable".
+         */
+        fun create(context: Context, model: ByteBuffer): Outcome = try {
             val options = HandLandmarker.HandLandmarkerOptions.builder()
                 .setBaseOptions(BaseOptions.builder().setModelAssetBuffer(model).build())
                 .setRunningMode(RunningMode.IMAGE)
@@ -72,11 +85,19 @@ class HandDetector private constructor(private val landmarker: HandLandmarker) {
                 .setMinHandPresenceConfidence(MIN_CONFIDENCE)
                 .setMinTrackingConfidence(MIN_CONFIDENCE)
                 .build()
-            HandDetector(HandLandmarker.createFromOptions(context, options))
+            Outcome.Ready(HandDetector(HandLandmarker.createFromOptions(context, options)))
         } catch (e: Throwable) {
             // Model corrupt, native library missing, unsupported device: all of
             // these mean "no hand tracking", never "no AR mode".
-            null
+            var root: Throwable = e
+            while (root.cause != null && root.cause !== root) root = root.cause!!
+            // The device ABI is included because the commonest silent cause is
+            // a build that ships no native library for this architecture, and
+            // that is otherwise indistinguishable from a code fault.
+            val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
+            Outcome.Failed(
+                "${root::class.java.simpleName}: ${root.message ?: "no detail"} [abi $abi]",
+            )
         }
 
         private const val MIN_CONFIDENCE = 0.5f

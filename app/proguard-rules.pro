@@ -63,3 +63,22 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+
+# --- protobuf-lite -----------------------------------------------------------
+#
+# MediaPipe builds its task graph from protobuf-lite messages, and
+# protobuf-lite resolves message fields reflectively through `dynamicMethod`.
+# Without these rules the generated classes survive but their field metadata
+# does not, and HandLandmarker.createFromOptions fails at runtime with nothing
+# useful in the message.
+-keep class com.google.protobuf.** { *; }
+-keep class * extends com.google.protobuf.GeneratedMessageLite { *; }
+-keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite {
+    <fields>;
+    <methods>;
+}
+-keep class com.google.flatbuffers.** { *; }
+-dontwarn com.google.protobuf.**
+
+# AutoValue-generated classes backing MediaPipe's options objects.
+-keep class **.AutoValue_* { *; }

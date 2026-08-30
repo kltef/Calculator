@@ -79,6 +79,15 @@ class HandPointer(
     private val smoothing: Float = DEFAULT_SMOOTHING,
     private val dwellMillis: Long = DEFAULT_DWELL_MILLIS,
     private val reachFactor: Float = DEFAULT_REACH,
+    /**
+     * How many of the middle, ring and pinky fingers must read as curled.
+     *
+     * Requiring all three is too strict in practice: landmark noise, and the
+     * way a relaxed hand leaves one finger half-out, make a perfectly ordinary
+     * pointing pose fail the test and the cursor never appears. Two of three
+     * keeps the gesture distinct from an open hand while tolerating that.
+     */
+    private val requiredCurled: Int = DEFAULT_REQUIRED_CURLED,
 ) {
 
     private var smoothed: Point2? = null
@@ -153,15 +162,19 @@ class HandPointer(
     }
 
     /**
-     * Pointing means index extended with the other three fingers curled. The
-     * thumb is ignored: it sits at an angle that makes "extended" ambiguous,
-     * and people point comfortably with the thumb either way.
+     * Pointing means the index extended with the other fingers mostly curled.
+     * The thumb is ignored: it sits at an angle that makes "extended"
+     * ambiguous, and people point comfortably with the thumb either way.
      */
-    private fun isPointing(hand: HandLandmarks): Boolean =
-        hand.isExtended(HandLandmarks.INDEX_TIP, HandLandmarks.INDEX_PIP) &&
-            !hand.isExtended(HandLandmarks.MIDDLE_TIP, HandLandmarks.MIDDLE_PIP) &&
-            !hand.isExtended(HandLandmarks.RING_TIP, HandLandmarks.RING_PIP) &&
-            !hand.isExtended(HandLandmarks.PINKY_TIP, HandLandmarks.PINKY_PIP)
+    fun isPointing(hand: HandLandmarks): Boolean {
+        if (!hand.isExtended(HandLandmarks.INDEX_TIP, HandLandmarks.INDEX_PIP)) return false
+        val curled = listOf(
+            HandLandmarks.MIDDLE_TIP to HandLandmarks.MIDDLE_PIP,
+            HandLandmarks.RING_TIP to HandLandmarks.RING_PIP,
+            HandLandmarks.PINKY_TIP to HandLandmarks.PINKY_PIP,
+        ).count { (tip, joint) -> !hand.isExtended(tip, joint) }
+        return curled >= requiredCurled
+    }
 
     /**
      * The cursor sits a little beyond the fingertip, along the finger.
@@ -187,5 +200,6 @@ class HandPointer(
         const val DEFAULT_SMOOTHING = 0.4f
         const val DEFAULT_DWELL_MILLIS = 700L
         const val DEFAULT_REACH = 0.6f
+        const val DEFAULT_REQUIRED_CURLED = 2
     }
 }

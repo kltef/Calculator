@@ -51,6 +51,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.core.content.ContextCompat
+import java.util.concurrent.Executors
 import com.cascalc.app.ArUiState
 import com.cascalc.app.ar.HandAndTextAnalyzer
 import com.cascalc.app.ar.HandDetector
@@ -262,19 +263,23 @@ private fun CameraPreview(
         onHandStatus("Preparing hand tracking…")
         val outcome = withContext(Dispatchers.IO) {
             when (val state = HandModel(context).load()) {
-                is HandModel.State.Ready ->
-                    HandDetector.create(context, state.buffer) to null
-                is HandModel.State.Failed -> null to state.reason
-                else -> null to "Hand tracking unavailable"
+                is HandModel.State.Ready -> HandDetector.create(context, state.buffer)
+                is HandModel.State.Failed -> HandDetector.Outcome.Failed(state.reason)
+                else -> HandDetector.Outcome.Failed("Hand model unavailable")
             }
         }
-        detector = outcome.first
-        onHandStatus(
-            when {
-                outcome.first != null -> null
-                else -> "${outcome.second ?: "Hand tracking unavailable"} — tap instead"
-            },
-        )
+        when (outcome) {
+            is HandDetector.Outcome.Ready -> {
+                detector = outcome.detector
+                onHandStatus(null)
+            }
+            is HandDetector.Outcome.Failed -> {
+                detector = null
+                // Report the real reason, not a shrug. Without it the only
+                // information is "it didn't work", which fixes nothing.
+                onHandStatus("Hand tracking off — ${outcome.reason}")
+            }
+        }
     }
 
     DisposableEffect(detector) {
@@ -287,7 +292,11 @@ private fun CameraPreview(
     val controller = remember { LifecycleCameraController(context) }
 
     DisposableEffect(Unit) {
-        val executor = ContextCompat.getMainExecutor(context)
+        // Analysis must NOT run on the main thread. Text recognition and hand
+        // detection each take tens of milliseconds per frame; on the UI thread
+        // that is a frozen screen and, before long, an ANR. CameraX drops
+        // frames while this executor is busy, which is the desired behaviour.
+        val executor = Executors.newSingleThreadExecutor()
         val analyzer = MlKitAnalyzer(
             listOf(recognizer),
             // View-referenced coordinates come back already mapped to the
@@ -333,6 +342,7 @@ private fun CameraPreview(
             controller.clearImageAnalysisAnalyzer()
             controller.unbind()
             recognizer.close()
+            executor.shutdown()
         }
     }
 
